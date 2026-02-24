@@ -76,4 +76,4 @@ Voor vragen: info@securefinance.nl
 
 ---
 
-© 2025 Secure Finance. Alle rechten voorbehouden. 
+© 2025 Secure Finance. Alle rechten voorbehouden.
