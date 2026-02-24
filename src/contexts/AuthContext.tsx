@@ -53,7 +53,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Error loading user profile:', error);
-        await supabase.auth.signOut();
+        // Don't sign out, just set user to null and let login page handle it
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        console.error('No user profile found');
         setUser(null);
         setLoading(false);
         return;
@@ -61,8 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(data as AuthUser);
     } catch (error) {
-      console.error('Error loading user profile:', error);
-      await supabase.auth.signOut();
+      console.error('Unexpected error loading user profile:', error);
       setUser(null);
     } finally {
       setLoading(false);
