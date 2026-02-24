@@ -51,11 +51,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', supabaseUser.id)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error loading user profile:', error);
+        await supabase.auth.signOut();
+        setUser(null);
+        setLoading(false);
+        return;
+      }
 
       setUser(data as AuthUser);
     } catch (error) {
       console.error('Error loading user profile:', error);
+      await supabase.auth.signOut();
       setUser(null);
     } finally {
       setLoading(false);
