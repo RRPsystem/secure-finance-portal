@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy } from 'lucide-react';
+import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy, UserPlus } from 'lucide-react';
 import type { Client, DocumentCategory, ClientDocumentAssignment, DocumentChecklist, DocumentSet, DocumentSetItem } from '../types/database.types';
 
 type View = 'list' | 'new' | 'detail' | 'sets';
@@ -52,6 +52,7 @@ export default function AccountantDashboard() {
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemDesc, setNewItemDesc] = useState('');
   const [applyingSet, setApplyingSet] = useState(false);
+  const [inviting, setInviting] = useState(false);
 
   const emptyForm = { company_name: '', contact_person: '', email: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -231,6 +232,42 @@ export default function AccountantDashboard() {
       alert('Fout: ' + err.message);
     } finally {
       setApplyingSet(false);
+    }
+  }
+
+  async function inviteClient() {
+    if (!selectedClient) return;
+    const clientEmail = selectedClient.email || formData.email;
+    if (!clientEmail) {
+      alert('Vul eerst een emailadres in bij Bedrijfsgegevens.');
+      return;
+    }
+    if (selectedClient.user_id) {
+      alert('Deze klant heeft al een account.');
+      return;
+    }
+    setInviting(true);
+    try {
+      const res = await fetch('/api/invite-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: selectedClient.id,
+          email: clientEmail,
+          contactPerson: selectedClient.contact_person,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Uitnodigen mislukt');
+      alert(`✅ Account aangemaakt voor ${clientEmail}\n\nTijdelijk wachtwoord: ${data.tempPassword}\n\nDeel dit wachtwoord met de klant. Ze kunnen inloggen op ${window.location.origin}`);
+      await loadClients();
+      // Refresh selected client
+      const updated = (await supabase.from('clients').select('*').eq('id', selectedClient.id).single()).data;
+      if (updated) setSelectedClient(updated);
+    } catch (err: any) {
+      alert('Fout bij uitnodigen: ' + err.message);
+    } finally {
+      setInviting(false);
     }
   }
 
@@ -866,14 +903,27 @@ export default function AccountantDashboard() {
 
         {view === 'detail' && selectedClient && (
           <>
-            <div className="flex items-center space-x-3 mb-6">
-              <button onClick={() => setView('list')} className="p-2 hover:bg-gray-200 rounded-lg">
-                <ArrowLeft className="w-5 h-5 text-gray-600" />
-              </button>
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">{selectedClient.company_name}</h2>
-                <p className="text-sm text-gray-600">{selectedClient.contact_person} · {selectedClient.city}</p>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <button onClick={() => setView('list')} className="p-2 hover:bg-gray-200 rounded-lg">
+                  <ArrowLeft className="w-5 h-5 text-gray-600" />
+                </button>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">{selectedClient.company_name}</h2>
+                  <p className="text-sm text-gray-600">{selectedClient.contact_person} · {selectedClient.city}</p>
+                </div>
               </div>
+              {selectedClient.user_id ? (
+                <span className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  <span>Klant heeft account</span>
+                </span>
+              ) : (
+                <button onClick={inviteClient} disabled={inviting} className="flex items-center space-x-2 px-4 py-2 border border-primary-300 bg-primary-50 rounded-lg text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50">
+                  <UserPlus className="w-4 h-4" />
+                  <span>{inviting ? 'Bezig...' : 'Klant uitnodigen'}</span>
+                </button>
+              )}
             </div>
 
             {/* Status overzicht + actiepunten */}
