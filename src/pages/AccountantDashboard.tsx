@@ -16,6 +16,7 @@ export default function AccountantDashboard() {
   const [formData, setFormData] = useState({
     company_name: '',
     contact_person: '',
+    email: '',
     phone: '',
     address: '',
     postal_code: '',
@@ -38,7 +39,7 @@ export default function AccountantDashboard() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [messages, setMessages] = useState<Array<{id: string; subject: string; description: string; status: string; created_at: string}>>([]);
 
-  const emptyForm = { company_name: '', contact_person: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
+  const emptyForm = { company_name: '', contact_person: '', email: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
   useEffect(() => {
     loadClients();
@@ -72,6 +73,7 @@ export default function AccountantDashboard() {
     setFormData({
       company_name: client.company_name,
       contact_person: client.contact_person,
+      email: client.email || '',
       phone: client.phone || '',
       address: client.address || '',
       postal_code: client.postal_code || '',
@@ -165,6 +167,37 @@ export default function AccountantDashboard() {
         created_by: user?.id,
       });
       if (error) throw error;
+
+      const clientEmail = selectedClient.email || formData.email;
+      if (clientEmail) {
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: clientEmail,
+              subject: `Bericht van uw boekhouder - ${selectedClient.company_name}`,
+              html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+                <div style="background:#1e40af;color:white;padding:20px;border-radius:8px 8px 0 0">
+                  <h2 style="margin:0">Secure Finance Portal</h2>
+                </div>
+                <div style="padding:20px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+                  <p>Beste ${selectedClient.contact_person},</p>
+                  <p>U heeft een nieuw bericht van uw boekhouder:</p>
+                  <div style="background:#f3f4f6;padding:15px;border-radius:8px;margin:15px 0">
+                    ${message.replace(/\n/g, '<br/>')}
+                  </div>
+                  <p style="color:#6b7280;font-size:13px">Dit is een automatisch bericht vanuit Secure Finance Portal.</p>
+                </div>
+              </div>`,
+              replyTo: user?.email,
+            }),
+          });
+        } catch {
+          console.warn('Email kon niet verzonden worden, bericht is wel opgeslagen.');
+        }
+      }
+
       setMessage('');
       await loadMessages(selectedClient.id);
     } catch (err: any) {
@@ -182,6 +215,7 @@ export default function AccountantDashboard() {
         const { error } = await supabase.from('clients').insert({
           company_name: formData.company_name,
           contact_person: formData.contact_person,
+          email: formData.email || null,
           phone: formData.phone || null,
           address: formData.address || null,
           postal_code: formData.postal_code || null,
@@ -195,6 +229,7 @@ export default function AccountantDashboard() {
         const { error } = await supabase.from('clients').update({
           company_name: formData.company_name,
           contact_person: formData.contact_person,
+          email: formData.email || null,
           phone: formData.phone || null,
           address: formData.address || null,
           postal_code: formData.postal_code || null,
@@ -261,6 +296,10 @@ export default function AccountantDashboard() {
             <h3 className="text-lg font-bold text-gray-900">Contactgegevens</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input type="email" className="input" placeholder="klant@bedrijf.nl" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Telefoon</label>
               <input type="text" className="input" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
@@ -564,6 +603,10 @@ export default function AccountantDashboard() {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Contactpersoon *</label>
                       <input type="text" required className="input" value={formData.contact_person} onChange={e => setFormData({...formData, contact_person: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                      <input type="email" className="input" placeholder="klant@bedrijf.nl" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Telefoon</label>

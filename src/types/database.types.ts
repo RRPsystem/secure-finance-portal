@@ -24,6 +24,7 @@ export interface Client {
   user_id: string;
   company_name: string;
   contact_person: string;
+  email?: string;
   phone: string;
   address: string;
   postal_code: string;
