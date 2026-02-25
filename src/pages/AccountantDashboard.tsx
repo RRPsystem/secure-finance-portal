@@ -38,6 +38,11 @@ export default function AccountantDashboard() {
   const [message, setMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
   const [messages, setMessages] = useState<Array<{id: string; subject: string; description: string; status: string; created_at: string}>>([]);
+  const [docRequests, setDocRequests] = useState<Array<{id: string; title: string; description?: string; deadline?: string; status: string; sent_at?: string; created_at: string}>>([]);
+  const [newReqTitle, setNewReqTitle] = useState('');
+  const [newReqDesc, setNewReqDesc] = useState('');
+  const [newReqDeadline, setNewReqDeadline] = useState('');
+  const [sendingRequests, setSendingRequests] = useState(false);
 
   const emptyForm = { company_name: '', contact_person: '', email: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -84,7 +89,7 @@ export default function AccountantDashboard() {
     });
     setView('detail');
     setDetailsOpen(false);
-    await Promise.all([loadDocumentData(client.id), loadMessages(client.id)]);
+    await Promise.all([loadDocumentData(client.id), loadMessages(client.id), loadDocRequests(client.id)]);
   }
 
   async function loadDocumentData(clientId: string) {
@@ -152,6 +157,112 @@ export default function AccountantDashboard() {
       .eq('client_id', clientId)
       .order('created_at', { ascending: false });
     if (data) setMessages(data);
+  }
+
+  async function loadDocRequests(clientId: string) {
+    const { data } = await supabase
+      .from('document_requests')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+    if (data) setDocRequests(data);
+  }
+
+  async function addDocRequest() {
+    if (!selectedClient || !newReqTitle.trim()) return;
+    const { error } = await supabase.from('document_requests').insert({
+      client_id: selectedClient.id,
+      title: newReqTitle,
+      description: newReqDesc || null,
+      deadline: newReqDeadline || null,
+      status: 'pending',
+      created_by: user?.id,
+    });
+    if (error) { alert('Fout: ' + error.message); return; }
+    setNewReqTitle('');
+    setNewReqDesc('');
+    setNewReqDeadline('');
+    await loadDocRequests(selectedClient.id);
+  }
+
+  async function deleteDocRequest(id: string) {
+    if (!selectedClient) return;
+    await supabase.from('document_requests').delete().eq('id', id);
+    await loadDocRequests(selectedClient.id);
+  }
+
+  async function sendDocRequestsEmail() {
+    if (!selectedClient) return;
+    const clientEmail = selectedClient.email || formData.email;
+    if (!clientEmail) {
+      alert('Vul eerst een emailadres in bij de bedrijfsgegevens.');
+      return;
+    }
+    const pending = docRequests.filter(r => r.status === 'pending');
+    if (pending.length === 0) {
+      alert('Geen openstaande verzoeken om te versturen.');
+      return;
+    }
+    setSendingRequests(true);
+    try {
+      const itemsHtml = pending.map(r =>
+        `<tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${r.title}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280">${r.description || '-'}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#dc2626">${r.deadline ? new Date(r.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Geen deadline'}</td>
+        </tr>`
+      ).join('');
+
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: clientEmail,
+          subject: `Documentverzoek - ${selectedClient.company_name}`,
+          html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+            <div style="background:#1e40af;color:white;padding:20px;border-radius:8px 8px 0 0">
+              <h2 style="margin:0">Secure Finance Portal</h2>
+              <p style="margin:5px 0 0;opacity:0.9">Documentverzoek</p>
+            </div>
+            <div style="padding:20px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
+              <p>Beste ${selectedClient.contact_person},</p>
+              <p>Wij hebben de volgende documenten van u nodig:</p>
+              <table style="width:100%;border-collapse:collapse;margin:15px 0">
+                <thead>
+                  <tr style="background:#f3f4f6">
+                    <th style="padding:8px 12px;text-align:left;font-size:13px">Document</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:13px">Toelichting</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:13px">Deadline</th>
+                  </tr>
+                </thead>
+                <tbody>${itemsHtml}</tbody>
+              </table>
+              <p>Kunt u deze documenten zo spoedig mogelijk aanleveren? U kunt reageren op deze email.</p>
+              <p>Met vriendelijke groet,<br/>Uw boekhouder</p>
+              <p style="color:#6b7280;font-size:12px;margin-top:20px">Verstuurd vanuit Secure Finance Portal</p>
+            </div>
+          </div>`,
+          replyTo: user?.email,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Email verzenden mislukt');
+      }
+
+      // Mark requests as sent
+      const ids = pending.map(r => r.id);
+      for (const id of ids) {
+        await supabase.from('document_requests').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', id);
+      }
+      await loadDocRequests(selectedClient.id);
+      alert(`Documentverzoek verstuurd naar ${clientEmail}`);
+    } catch (err: any) {
+      alert('Fout bij verzenden: ' + err.message);
+    } finally {
+      setSendingRequests(false);
+    }
   }
 
   async function sendMessage() {
@@ -547,39 +658,58 @@ export default function AccountantDashboard() {
               </div>
             </div>
 
-            {/* Status overzicht */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="card">
-                <div className="flex items-center space-x-3">
-                  {getStatusIcon(selectedClient.completeness_score)}
-                  <div>
-                    <p className="text-sm text-gray-600">Volledigheid</p>
-                    <p className="text-lg font-bold">{selectedClient.completeness_score}%</p>
+            {/* Status overzicht + actiepunten */}
+            {(() => {
+              const alerts: Array<{type: 'error' | 'warning' | 'info' | 'success'; text: string}> = [];
+              const noEmail = !selectedClient.email && !formData.email;
+              const noAssignments = assignments.length === 0;
+              const withoutDeadline = assignments.filter(a => !a.deadline);
+              const overdue = assignments.filter(a => a.deadline && new Date(a.deadline) < new Date());
+              const upcoming = assignments.filter(a => {
+                if (!a.deadline) return false;
+                const d = new Date(a.deadline);
+                const now = new Date();
+                const inWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                return d >= now && d <= inWeek;
+              });
+
+              if (noEmail) alerts.push({ type: 'warning', text: 'Geen emailadres ingevuld — berichten kunnen niet per email verstuurd worden.' });
+              if (noAssignments) alerts.push({ type: 'error', text: 'Geen document categorieën toegewezen. Wijs hieronder categorieën toe aan deze klant.' });
+              if (withoutDeadline.length > 0) {
+                const names = withoutDeadline.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
+                alerts.push({ type: 'warning', text: `${withoutDeadline.length} ${withoutDeadline.length === 1 ? 'categorie' : 'categorieën'} zonder deadline: ${names.join(', ')}` });
+              }
+              if (overdue.length > 0) {
+                const names = overdue.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
+                alerts.push({ type: 'error', text: `${overdue.length} verlopen deadline${overdue.length > 1 ? 's' : ''}: ${names.join(', ')}` });
+              }
+              if (upcoming.length > 0) {
+                const names = upcoming.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
+                alerts.push({ type: 'info', text: `${upcoming.length} deadline${upcoming.length > 1 ? 's' : ''} deze week: ${names.join(', ')}` });
+              }
+              if (alerts.length === 0) alerts.push({ type: 'success', text: 'Alles ziet er goed uit. Geen openstaande actiepunten.' });
+
+              const colorMap = { error: 'bg-red-50 border-red-200 text-red-800', warning: 'bg-yellow-50 border-yellow-200 text-yellow-800', info: 'bg-blue-50 border-blue-200 text-blue-800', success: 'bg-green-50 border-green-200 text-green-800' };
+              const iconMap = { error: <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />, warning: <Clock className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />, info: <CalendarDays className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />, success: <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" /> };
+
+              return (
+                <div className="mb-6 space-y-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Actiepunten</h3>
+                    <div className="flex items-center space-x-4 text-sm text-gray-500">
+                      <span><span className="font-medium text-gray-900">{assignments.length}</span> categorieën</span>
+                      <span><span className="font-medium text-gray-900">{messages.length}</span> berichten</span>
+                    </div>
                   </div>
+                  {alerts.map((alert, i) => (
+                    <div key={i} className={`flex items-start space-x-3 px-4 py-3 rounded-lg border ${colorMap[alert.type]}`}>
+                      {iconMap[alert.type]}
+                      <span className="text-sm">{alert.text}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="mt-2 bg-gray-200 rounded-full h-2">
-                  <div className={`h-2 rounded-full ${selectedClient.completeness_score >= 80 ? 'bg-green-500' : selectedClient.completeness_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${selectedClient.completeness_score}%` }} />
-                </div>
-              </div>
-              <div className="card">
-                <div className="flex items-center space-x-3">
-                  <ClipboardList className="w-5 h-5 text-primary-600" />
-                  <div>
-                    <p className="text-sm text-gray-600">Toegewezen categorieën</p>
-                    <p className="text-lg font-bold">{assignments.length}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="card">
-                <div className="flex items-center space-x-3">
-                  <MessageSquare className="w-5 h-5 text-primary-600" />
-                  <div>
-                    <p className="text-sm text-gray-600">Berichten</p>
-                    <p className="text-lg font-bold">{messages.length}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Inklapbare bedrijfsgegevens */}
             <div className="card mb-6">
@@ -647,6 +777,90 @@ export default function AccountantDashboard() {
                     </button>
                   </div>
                 </form>
+              )}
+            </div>
+
+            {/* Documentverzoeken */}
+            <div className="card mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <FileText className="w-5 h-5 text-primary-600" />
+                  <h3 className="text-lg font-bold text-gray-900">Documentverzoeken</h3>
+                </div>
+                {docRequests.filter(r => r.status === 'pending').length > 0 && (
+                  <button onClick={sendDocRequestsEmail} disabled={sendingRequests} className="btn-primary disabled:opacity-50 flex items-center space-x-2 text-sm">
+                    <Send className="w-4 h-4" />
+                    <span>{sendingRequests ? 'Verzenden...' : `Verstuur naar klant (${docRequests.filter(r => r.status === 'pending').length})`}</span>
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-gray-500 mb-4">Voeg specifieke documenten toe die de klant moet inleveren en verstuur het overzicht per email.</p>
+
+              <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                  <div className="md:col-span-4">
+                    <input type="text" placeholder="Document (bijv. Jaaropgave bank 2024)" className="input" value={newReqTitle} onChange={e => setNewReqTitle(e.target.value)} />
+                  </div>
+                  <div className="md:col-span-4">
+                    <input type="text" placeholder="Toelichting (optioneel)" className="input" value={newReqDesc} onChange={e => setNewReqDesc(e.target.value)} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <input type="date" className="input" value={newReqDeadline} onChange={e => setNewReqDeadline(e.target.value)} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <button onClick={addDocRequest} disabled={!newReqTitle.trim()} className="btn-primary w-full disabled:opacity-50">
+                      <Plus className="w-4 h-4 mr-1 inline" />Toevoegen
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {docRequests.length === 0 ? (
+                <p className="text-gray-500 text-center py-4 text-sm">Nog geen documentverzoeken. Voeg hierboven documenten toe die de klant moet inleveren.</p>
+              ) : (
+                <div className="space-y-2">
+                  {docRequests.map(req => {
+                    const statusColors: Record<string, string> = {
+                      pending: 'bg-yellow-100 text-yellow-800',
+                      sent: 'bg-blue-100 text-blue-800',
+                      received: 'bg-green-100 text-green-800',
+                      approved: 'bg-green-100 text-green-800',
+                      rejected: 'bg-red-100 text-red-800',
+                    };
+                    const statusLabels: Record<string, string> = {
+                      pending: 'Nog niet verstuurd',
+                      sent: 'Verstuurd',
+                      received: 'Ontvangen',
+                      approved: 'Goedgekeurd',
+                      rejected: 'Afgekeurd',
+                    };
+                    return (
+                      <div key={req.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium text-gray-900">{req.title}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[req.status] || 'bg-gray-100 text-gray-600'}`}>
+                              {statusLabels[req.status] || req.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-3 mt-1 text-xs text-gray-500">
+                            {req.description && <span>{req.description}</span>}
+                            {req.deadline && (
+                              <span className="flex items-center space-x-1">
+                                <CalendarDays className="w-3 h-3" />
+                                <span>Deadline: {new Date(req.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                              </span>
+                            )}
+                            {req.sent_at && <span>Verstuurd: {new Date(req.sent_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>}
+                          </div>
+                        </div>
+                        <button onClick={() => deleteDocRequest(req.id)} className="p-1 text-red-400 hover:text-red-600 ml-2" title="Verwijderen">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
