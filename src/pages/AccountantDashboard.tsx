@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save } from 'lucide-react';
-import type { Client } from '../types/database.types';
+import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList } from 'lucide-react';
+import type { Client, DocumentCategory, ClientDocumentAssignment, DocumentChecklist } from '../types/database.types';
 
 type View = 'list' | 'new' | 'detail';
 
@@ -24,6 +24,11 @@ export default function AccountantDashboard() {
     btw_number: '',
     subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht',
   });
+
+  const [categories, setCategories] = useState<DocumentCategory[]>([]);
+  const [assignments, setAssignments] = useState<ClientDocumentAssignment[]>([]);
+  const [checklistItems, setChecklistItems] = useState<DocumentChecklist[]>([]);
+  const [assignDeadlines, setAssignDeadlines] = useState<Record<string, string>>({});
 
   const emptyForm = { company_name: '', contact_person: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -54,7 +59,7 @@ export default function AccountantDashboard() {
     setView('new');
   }
 
-  function openClientDetail(client: Client) {
+  async function openClientDetail(client: Client) {
     setSelectedClient(client);
     setFormData({
       company_name: client.company_name,
@@ -68,6 +73,50 @@ export default function AccountantDashboard() {
       subscription_type: client.subscription_type,
     });
     setView('detail');
+    await loadDocumentData(client.id);
+  }
+
+  async function loadDocumentData(clientId: string) {
+    const [catRes, assignRes, checkRes] = await Promise.all([
+      supabase.from('document_categories').select('*').eq('is_active', true).order('year', { ascending: false }).order('sort_order'),
+      supabase.from('client_document_assignments').select('*').eq('client_id', clientId),
+      supabase.from('document_checklists').select('*').order('sort_order'),
+    ]);
+    if (catRes.data) setCategories(catRes.data);
+    if (assignRes.data) {
+      setAssignments(assignRes.data);
+      const deadlines: Record<string, string> = {};
+      assignRes.data.forEach((a: ClientDocumentAssignment) => {
+        if (a.deadline) deadlines[a.category_id] = a.deadline.split('T')[0];
+      });
+      setAssignDeadlines(deadlines);
+    }
+    if (checkRes.data) setChecklistItems(checkRes.data);
+  }
+
+  async function toggleAssignment(categoryId: string) {
+    if (!selectedClient) return;
+    const existing = assignments.find(a => a.category_id === categoryId);
+    if (existing) {
+      await supabase.from('client_document_assignments').delete().eq('id', existing.id);
+    } else {
+      await supabase.from('client_document_assignments').insert({
+        client_id: selectedClient.id,
+        category_id: categoryId,
+        deadline: assignDeadlines[categoryId] ? new Date(assignDeadlines[categoryId]).toISOString() : null,
+      });
+    }
+    await loadDocumentData(selectedClient.id);
+  }
+
+  async function updateDeadline(categoryId: string, date: string) {
+    setAssignDeadlines(prev => ({ ...prev, [categoryId]: date }));
+    const existing = assignments.find(a => a.category_id === categoryId);
+    if (existing) {
+      await supabase.from('client_document_assignments').update({
+        deadline: date ? new Date(date).toISOString() : null,
+      }).eq('id', existing.id);
+    }
   }
 
   async function handleSaveClient(e: React.FormEvent) {
@@ -404,6 +453,80 @@ export default function AccountantDashboard() {
               </div>
             </div>
             {renderClientForm(false)}
+
+            <div className="mt-8">
+              <div className="card">
+                <div className="flex items-center space-x-3 mb-6">
+                  <ClipboardList className="w-5 h-5 text-primary-600" />
+                  <h3 className="text-lg font-bold text-gray-900">Documenten & Deadlines</h3>
+                </div>
+                <p className="text-sm text-gray-500 mb-4">Vink aan welke documentcategorieën deze klant moet inleveren en stel deadlines in.</p>
+
+                {categories.length === 0 ? (
+                  <p className="text-gray-500 text-center py-8">Geen document categorieën gevonden. Voer eerst de SQL uit in Supabase.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {categories.map(cat => {
+                      const isAssigned = assignments.some(a => a.category_id === cat.id);
+                      const catChecklist = checklistItems.filter(ci => ci.category_id === cat.id);
+                      return (
+                        <div key={cat.id} className={`border rounded-lg p-4 transition-colors ${isAssigned ? 'border-primary-300 bg-primary-50' : 'border-gray-200'}`}>
+                          <div className="flex items-center justify-between">
+                            <label className="flex items-center space-x-3 cursor-pointer flex-1">
+                              <input
+                                type="checkbox"
+                                checked={isAssigned}
+                                onChange={() => toggleAssignment(cat.id)}
+                                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              />
+                              <div>
+                                <span className="font-medium text-gray-900">{cat.name}</span>
+                                <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                                  {cat.category_type === 'btw_quarter' ? 'BTW' : cat.category_type === 'annual_report' ? 'Jaarrekening' : cat.category_type === 'tax_return' ? 'Aangifte' : cat.category_type}
+                                </span>
+                              </div>
+                            </label>
+                            {isAssigned && (
+                              <div className="flex items-center space-x-2">
+                                <CalendarDays className="w-4 h-4 text-gray-400" />
+                                <input
+                                  type="date"
+                                  value={assignDeadlines[cat.id] || ''}
+                                  onChange={e => updateDeadline(cat.id, e.target.value)}
+                                  className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-primary-500 focus:border-primary-500"
+                                />
+                                <button onClick={() => toggleAssignment(cat.id)} className="p-1 text-red-400 hover:text-red-600" title="Verwijderen">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {isAssigned && catChecklist.length > 0 && (
+                            <div className="mt-3 ml-7 space-y-1">
+                              {catChecklist.map(item => (
+                                <div key={item.id} className="flex items-center space-x-2 text-sm text-gray-600">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                                  <span>{item.item_name}</span>
+                                  {item.is_required && <span className="text-xs text-red-500">*verplicht</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {assignments.length > 0 && (
+                  <div className="mt-6 pt-4 border-t">
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">{assignments.length}</span> {assignments.length === 1 ? 'categorie' : 'categorieën'} toegewezen aan deze klant
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           </>
         )}
       </main>

@@ -130,6 +130,15 @@ export interface ReminderSettings {
   fee_after_reminders: number;
 }
 
+export interface ClientDocumentAssignment {
+  id: string;
+  client_id: string;
+  category_id: string;
+  deadline?: string;
+  notes?: string;
+  created_at: string;
+}
+
 export interface ActivityLog {
   id: string;
   user_id: string;
