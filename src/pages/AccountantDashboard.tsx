@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare } from 'lucide-react';
-import type { Client, DocumentCategory, ClientDocumentAssignment, DocumentChecklist } from '../types/database.types';
+import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy } from 'lucide-react';
+import type { Client, DocumentCategory, ClientDocumentAssignment, DocumentChecklist, DocumentSet, DocumentSetItem } from '../types/database.types';
 
-type View = 'list' | 'new' | 'detail';
+type View = 'list' | 'new' | 'detail' | 'sets';
 
 export default function AccountantDashboard() {
   const { user, signOut } = useAuth();
@@ -43,6 +43,14 @@ export default function AccountantDashboard() {
   const [newReqDesc, setNewReqDesc] = useState('');
   const [newReqDeadline, setNewReqDeadline] = useState('');
   const [sendingRequests, setSendingRequests] = useState(false);
+  const [docSets, setDocSets] = useState<DocumentSet[]>([]);
+  const [docSetItems, setDocSetItems] = useState<DocumentSetItem[]>([]);
+  const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [newSetName, setNewSetName] = useState('');
+  const [newSetDesc, setNewSetDesc] = useState('');
+  const [newItemTitle, setNewItemTitle] = useState('');
+  const [newItemDesc, setNewItemDesc] = useState('');
+  const [applyingSet, setApplyingSet] = useState(false);
 
   const emptyForm = { company_name: '', contact_person: '', email: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -89,7 +97,7 @@ export default function AccountantDashboard() {
     });
     setView('detail');
     setDetailsOpen(false);
-    await Promise.all([loadDocumentData(client.id), loadMessages(client.id), loadDocRequests(client.id)]);
+    await Promise.all([loadDocumentData(client.id), loadMessages(client.id), loadDocRequests(client.id), loadSets()]);
   }
 
   async function loadDocumentData(clientId: string) {
@@ -148,6 +156,81 @@ export default function AccountantDashboard() {
     setNewCatName('');
     setShowNewCategory(false);
     if (selectedClient) await loadDocumentData(selectedClient.id);
+  }
+
+  async function loadSets() {
+    const [setsRes, itemsRes] = await Promise.all([
+      supabase.from('document_sets').select('*').order('created_at', { ascending: false }),
+      supabase.from('document_set_items').select('*').order('sort_order'),
+    ]);
+    if (setsRes.data) setDocSets(setsRes.data);
+    if (itemsRes.data) setDocSetItems(itemsRes.data);
+  }
+
+  async function createSet() {
+    if (!newSetName.trim()) return;
+    const { error } = await supabase.from('document_sets').insert({
+      name: newSetName,
+      description: newSetDesc || null,
+      created_by: user?.id,
+    });
+    if (error) { alert('Fout: ' + error.message); return; }
+    setNewSetName('');
+    setNewSetDesc('');
+    await loadSets();
+  }
+
+  async function addSetItem(setId: string) {
+    if (!newItemTitle.trim()) return;
+    const currentItems = docSetItems.filter(i => i.set_id === setId);
+    const { error } = await supabase.from('document_set_items').insert({
+      set_id: setId,
+      title: newItemTitle,
+      description: newItemDesc || null,
+      sort_order: currentItems.length + 1,
+    });
+    if (error) { alert('Fout: ' + error.message); return; }
+    setNewItemTitle('');
+    setNewItemDesc('');
+    await loadSets();
+  }
+
+  async function deleteSetItem(itemId: string) {
+    await supabase.from('document_set_items').delete().eq('id', itemId);
+    await loadSets();
+  }
+
+  async function deleteSet(setId: string) {
+    if (!confirm('Set verwijderen? Alle items worden ook verwijderd.')) return;
+    await supabase.from('document_sets').delete().eq('id', setId);
+    if (editingSetId === setId) setEditingSetId(null);
+    await loadSets();
+  }
+
+  async function applySetToClient(setId: string, deadline?: string) {
+    if (!selectedClient) return;
+    setApplyingSet(true);
+    try {
+      const items = docSetItems.filter(i => i.set_id === setId);
+      if (items.length === 0) { alert('Deze set heeft geen documenten.'); return; }
+      for (const item of items) {
+        await supabase.from('document_requests').insert({
+          client_id: selectedClient.id,
+          title: item.title,
+          description: item.description || null,
+          deadline: deadline || null,
+          status: 'pending',
+          created_by: user?.id,
+        });
+      }
+      await loadDocRequests(selectedClient.id);
+      const setName = docSets.find(s => s.id === setId)?.name || 'Set';
+      alert(`${items.length} documenten uit "${setName}" toegevoegd.`);
+    } catch (err: any) {
+      alert('Fout: ' + err.message);
+    } finally {
+      setApplyingSet(false);
+    }
   }
 
   async function loadMessages(clientId: string) {
@@ -574,10 +657,16 @@ export default function AccountantDashboard() {
             <div className="card">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-bold text-gray-900">Klanten Overzicht</h3>
-                <button className="btn-primary" onClick={openNewClient}>
-                  <Plus className="w-4 h-4 mr-2 inline" />
-                  Nieuwe klant
-                </button>
+                <div className="flex items-center space-x-3">
+                  <button className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50" onClick={() => { loadSets(); setView('sets'); }}>
+                    <Package className="w-4 h-4" />
+                    <span>Document Sets</span>
+                  </button>
+                  <button className="btn-primary" onClick={openNewClient}>
+                    <Plus className="w-4 h-4 mr-2 inline" />
+                    Nieuwe klant
+                  </button>
+                </div>
               </div>
 
               {clients.length === 0 ? (
@@ -666,6 +755,105 @@ export default function AccountantDashboard() {
               <h2 className="text-xl font-bold text-gray-900">Nieuwe klant toevoegen</h2>
             </div>
             {renderClientForm(true)}
+          </>
+        )}
+
+        {view === 'sets' && (
+          <>
+            <div className="flex items-center space-x-3 mb-6">
+              <button onClick={() => setView('list')} className="p-2 hover:bg-gray-200 rounded-lg">
+                <ArrowLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Document Sets</h2>
+                <p className="text-sm text-gray-600">Maak herbruikbare sjablonen met documenten die je snel kunt toepassen op klanten.</p>
+              </div>
+            </div>
+
+            {/* Nieuwe set aanmaken */}
+            <div className="card mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Nieuwe set aanmaken</h3>
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <div className="md:col-span-4">
+                  <input type="text" placeholder="Naam (bijv. IB Aangifte)" className="input" value={newSetName} onChange={e => setNewSetName(e.target.value)} />
+                </div>
+                <div className="md:col-span-6">
+                  <input type="text" placeholder="Omschrijving (optioneel)" className="input" value={newSetDesc} onChange={e => setNewSetDesc(e.target.value)} />
+                </div>
+                <div className="md:col-span-2">
+                  <button onClick={createSet} disabled={!newSetName.trim()} className="btn-primary w-full disabled:opacity-50">
+                    <Plus className="w-4 h-4 mr-1 inline" />Aanmaken
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Bestaande sets */}
+            {docSets.length === 0 ? (
+              <div className="card text-center py-12">
+                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">Nog geen document sets aangemaakt.</p>
+                <p className="text-sm text-gray-500 mt-1">Maak hierboven een set aan, bijv. "IB Aangifte" of "BTW Kwartaal".</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {docSets.map(set => {
+                  const items = docSetItems.filter(i => i.set_id === set.id);
+                  const isOpen = editingSetId === set.id;
+                  return (
+                    <div key={set.id} className="card">
+                      <div className="flex items-center justify-between">
+                        <button onClick={() => setEditingSetId(isOpen ? null : set.id)} className="flex items-center space-x-3 flex-1 text-left">
+                          {isOpen ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <Package className="w-4 h-4 text-primary-600" />
+                              <span className="font-bold text-gray-900">{set.name}</span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-primary-100 text-primary-700">{items.length} documenten</span>
+                            </div>
+                            {set.description && <p className="text-sm text-gray-500 mt-0.5 ml-6">{set.description}</p>}
+                          </div>
+                        </button>
+                        <button onClick={() => deleteSet(set.id)} className="p-1.5 text-red-400 hover:text-red-600" title="Set verwijderen">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {isOpen && (
+                        <div className="mt-4 ml-8 border-t border-gray-100 pt-4">
+                          {/* Items in deze set */}
+                          {items.length > 0 && (
+                            <div className="space-y-2 mb-4">
+                              {items.map((item, idx) => (
+                                <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xs font-medium text-gray-400 w-5">{idx + 1}.</span>
+                                    <span className="text-sm font-medium text-gray-900">{item.title}</span>
+                                    {item.description && <span className="text-xs text-gray-500">— {item.description}</span>}
+                                  </div>
+                                  <button onClick={() => deleteSetItem(item.id)} className="p-1 text-red-400 hover:text-red-600">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Nieuw item toevoegen */}
+                          <div className="flex space-x-2">
+                            <input type="text" placeholder="Document naam (bijv. Jaaropgave bank)" className="input flex-1 text-sm" value={newItemTitle} onChange={e => setNewItemTitle(e.target.value)} />
+                            <input type="text" placeholder="Toelichting (optioneel)" className="input flex-1 text-sm" value={newItemDesc} onChange={e => setNewItemDesc(e.target.value)} />
+                            <button onClick={() => addSetItem(set.id)} disabled={!newItemTitle.trim()} className="btn-primary disabled:opacity-50 text-sm whitespace-nowrap">
+                              <Plus className="w-3.5 h-3.5 mr-1 inline" />Toevoegen
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
 
@@ -814,6 +1002,36 @@ export default function AccountantDashboard() {
                   <span>Nieuwe categorie</span>
                 </button>
               </div>
+
+              {/* Set toepassen */}
+              {docSets.length > 0 && (
+                <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Copy className="w-4 h-4 text-primary-600" />
+                    <span className="text-sm font-medium text-primary-900">Set toepassen op deze klant</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <select id="setSelect" className="input flex-1 text-sm" defaultValue="">
+                      <option value="" disabled>Kies een document set...</option>
+                      {docSets.map(s => (
+                        <option key={s.id} value={s.id}>{s.name} ({docSetItems.filter(i => i.set_id === s.id).length} documenten)</option>
+                      ))}
+                    </select>
+                    <input type="date" id="setDeadline" className="input text-sm w-40" placeholder="Deadline" />
+                    <button
+                      onClick={() => {
+                        const sel = (document.getElementById('setSelect') as HTMLSelectElement)?.value;
+                        const dl = (document.getElementById('setDeadline') as HTMLInputElement)?.value;
+                        if (sel) applySetToClient(sel, dl || undefined);
+                      }}
+                      disabled={applyingSet}
+                      className="btn-primary disabled:opacity-50 text-sm whitespace-nowrap"
+                    >
+                      <Package className="w-4 h-4 mr-1 inline" />{applyingSet ? 'Bezig...' : 'Toepassen'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {showNewCategory && (
                 <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">

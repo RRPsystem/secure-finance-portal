@@ -140,6 +140,22 @@ export interface ClientDocumentAssignment {
   created_at: string;
 }
 
+export interface DocumentSet {
+  id: string;
+  name: string;
+  description?: string;
+  created_by?: string;
+  created_at: string;
+}
+
+export interface DocumentSetItem {
+  id: string;
+  set_id: string;
+  title: string;
+  description?: string;
+  sort_order: number;
+}
+
 export interface ActivityLog {
   id: string;
   user_id: string;
