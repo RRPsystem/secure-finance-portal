@@ -357,9 +357,9 @@ export default function AccountantDashboard() {
         }),
       });
 
+      const result = await res.json();
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Email verzenden mislukt');
+        throw new Error(result.error || 'Email verzenden mislukt');
       }
 
       // Mark custom requests as sent
@@ -368,7 +368,11 @@ export default function AccountantDashboard() {
       }
       await loadDocRequests(selectedClient.id);
       setSendIntro('');
-      alert(`Documentoverzicht (${allItems.length} items) verstuurd naar ${clientEmail}`);
+      if (result.demo) {
+        alert(`✅ Test-modus: documentoverzicht (${allItems.length} items) gesimuleerd verstuurd naar ${clientEmail}.\n\nOm echt te versturen: verificeer je domein op resend.com/domains.`);
+      } else {
+        alert(`✅ Documentoverzicht (${allItems.length} items) verstuurd naar ${clientEmail}`);
+      }
     } catch (err: any) {
       alert('Fout bij verzenden: ' + err.message);
     } finally {
