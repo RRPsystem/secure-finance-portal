@@ -45,18 +45,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function loadUserProfile(supabaseUser: SupabaseUser) {
     try {
-      console.log('Loading profile for user:', supabaseUser.id, supabaseUser.email);
       const { data, error } = await supabase
         .from('users')
         .select('id, email, role')
         .eq('id', supabaseUser.id)
         .single();
 
-      console.log('Profile query result:', { data, error });
-
       if (error) {
         console.error('Error loading user profile:', error);
-        alert('Fout bij laden profiel: ' + error.message);
         setUser(null);
         setLoading(false);
         return;
@@ -64,16 +60,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!data) {
         console.error('No user profile found');
-        alert('Geen gebruikersprofiel gevonden in public.users tabel');
         setUser(null);
         setLoading(false);
         return;
       }
 
       setUser(data as AuthUser);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Unexpected error loading user profile:', error);
-      alert('Onverwachte fout: ' + error.message);
       setUser(null);
     } finally {
       setLoading(false);
