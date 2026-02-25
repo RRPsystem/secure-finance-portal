@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList } from 'lucide-react';
+import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare } from 'lucide-react';
 import type { Client, DocumentCategory, ClientDocumentAssignment, DocumentChecklist } from '../types/database.types';
 
 type View = 'list' | 'new' | 'detail';
@@ -29,6 +29,14 @@ export default function AccountantDashboard() {
   const [assignments, setAssignments] = useState<ClientDocumentAssignment[]>([]);
   const [checklistItems, setChecklistItems] = useState<DocumentChecklist[]>([]);
   const [assignDeadlines, setAssignDeadlines] = useState<Record<string, string>>({});
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatType, setNewCatType] = useState<string>('other');
+  const [newCatYear, setNewCatYear] = useState(new Date().getFullYear());
+  const [message, setMessage] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [messages, setMessages] = useState<Array<{id: string; subject: string; description: string; status: string; created_at: string}>>([]);
 
   const emptyForm = { company_name: '', contact_person: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -73,7 +81,8 @@ export default function AccountantDashboard() {
       subscription_type: client.subscription_type,
     });
     setView('detail');
-    await loadDocumentData(client.id);
+    setDetailsOpen(false);
+    await Promise.all([loadDocumentData(client.id), loadMessages(client.id)]);
   }
 
   async function loadDocumentData(clientId: string) {
@@ -116,6 +125,52 @@ export default function AccountantDashboard() {
       await supabase.from('client_document_assignments').update({
         deadline: date ? new Date(date).toISOString() : null,
       }).eq('id', existing.id);
+    }
+  }
+
+  async function createCategory() {
+    if (!newCatName.trim()) return;
+    const { error } = await supabase.from('document_categories').insert({
+      name: newCatName,
+      category_type: newCatType,
+      year: newCatYear,
+      sort_order: categories.length + 1,
+      is_active: true,
+    });
+    if (error) { alert('Fout: ' + error.message); return; }
+    setNewCatName('');
+    setShowNewCategory(false);
+    if (selectedClient) await loadDocumentData(selectedClient.id);
+  }
+
+  async function loadMessages(clientId: string) {
+    const { data } = await supabase
+      .from('tickets')
+      .select('id, subject, description, status, created_at')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+    if (data) setMessages(data);
+  }
+
+  async function sendMessage() {
+    if (!selectedClient || !message.trim()) return;
+    setSendingMessage(true);
+    try {
+      const { error } = await supabase.from('tickets').insert({
+        client_id: selectedClient.id,
+        subject: 'Bericht van boekhouder',
+        description: message,
+        status: 'waiting_client',
+        priority: 'normal',
+        created_by: user?.id,
+      });
+      if (error) throw error;
+      setMessage('');
+      await loadMessages(selectedClient.id);
+    } catch (err: any) {
+      alert('Fout bij verzenden: ' + err.message);
+    } finally {
+      setSendingMessage(false);
     }
   }
 
@@ -449,83 +504,237 @@ export default function AccountantDashboard() {
               </button>
               <div>
                 <h2 className="text-xl font-bold text-gray-900">{selectedClient.company_name}</h2>
-                <p className="text-sm text-gray-600">{selectedClient.contact_person}</p>
+                <p className="text-sm text-gray-600">{selectedClient.contact_person} · {selectedClient.city}</p>
               </div>
             </div>
-            {renderClientForm(false)}
 
-            <div className="mt-8">
+            {/* Status overzicht */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div className="card">
-                <div className="flex items-center space-x-3 mb-6">
+                <div className="flex items-center space-x-3">
+                  {getStatusIcon(selectedClient.completeness_score)}
+                  <div>
+                    <p className="text-sm text-gray-600">Volledigheid</p>
+                    <p className="text-lg font-bold">{selectedClient.completeness_score}%</p>
+                  </div>
+                </div>
+                <div className="mt-2 bg-gray-200 rounded-full h-2">
+                  <div className={`h-2 rounded-full ${selectedClient.completeness_score >= 80 ? 'bg-green-500' : selectedClient.completeness_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${selectedClient.completeness_score}%` }} />
+                </div>
+              </div>
+              <div className="card">
+                <div className="flex items-center space-x-3">
+                  <ClipboardList className="w-5 h-5 text-primary-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">Toegewezen categorieën</p>
+                    <p className="text-lg font-bold">{assignments.length}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="card">
+                <div className="flex items-center space-x-3">
+                  <MessageSquare className="w-5 h-5 text-primary-600" />
+                  <div>
+                    <p className="text-sm text-gray-600">Berichten</p>
+                    <p className="text-lg font-bold">{messages.length}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Inklapbare bedrijfsgegevens */}
+            <div className="card mb-6">
+              <button type="button" onClick={() => setDetailsOpen(!detailsOpen)} className="flex items-center justify-between w-full">
+                <div className="flex items-center space-x-3">
+                  <Building2 className="w-5 h-5 text-primary-600" />
+                  <h3 className="text-lg font-bold text-gray-900">Bedrijfsgegevens</h3>
+                </div>
+                {detailsOpen ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
+              </button>
+              {!detailsOpen && (
+                <p className="text-sm text-gray-500 mt-2">{formData.company_name} · {formData.contact_person} · {formData.city || 'Geen stad'} · {formData.subscription_type === 'abonnement' ? 'Abonnement' : 'Per opdracht'}</p>
+              )}
+              {detailsOpen && (
+                <form onSubmit={handleSaveClient} className="mt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Bedrijfsnaam *</label>
+                      <input type="text" required className="input" value={formData.company_name} onChange={e => setFormData({...formData, company_name: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Contactpersoon *</label>
+                      <input type="text" required className="input" value={formData.contact_person} onChange={e => setFormData({...formData, contact_person: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Telefoon</label>
+                      <input type="text" className="input" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Stad</label>
+                      <input type="text" className="input" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Adres</label>
+                      <input type="text" className="input" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Postcode</label>
+                      <input type="text" className="input" value={formData.postal_code} onChange={e => setFormData({...formData, postal_code: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">KVK nummer</label>
+                      <input type="text" className="input" value={formData.kvk_number} onChange={e => setFormData({...formData, kvk_number: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">BTW nummer</label>
+                      <input type="text" className="input" value={formData.btw_number} onChange={e => setFormData({...formData, btw_number: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Type abonnement</label>
+                      <select className="input" value={formData.subscription_type} onChange={e => setFormData({...formData, subscription_type: e.target.value as 'abonnement' | 'per_opdracht'})}>
+                        <option value="abonnement">Abonnement</option>
+                        <option value="per_opdracht">Per opdracht</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50 flex items-center space-x-2">
+                      <Save className="w-4 h-4" />
+                      <span>{saving ? 'Opslaan...' : 'Wijzigingen opslaan'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* Documenten & Deadlines */}
+            <div className="card mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
                   <ClipboardList className="w-5 h-5 text-primary-600" />
                   <h3 className="text-lg font-bold text-gray-900">Documenten & Deadlines</h3>
                 </div>
-                <p className="text-sm text-gray-500 mb-4">Vink aan welke documentcategorieën deze klant moet inleveren en stel deadlines in.</p>
+                <button onClick={() => setShowNewCategory(!showNewCategory)} className="text-sm text-primary-600 hover:text-primary-700 flex items-center space-x-1">
+                  <Plus className="w-4 h-4" />
+                  <span>Nieuwe categorie</span>
+                </button>
+              </div>
 
-                {categories.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">Geen document categorieën gevonden. Voer eerst de SQL uit in Supabase.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {categories.map(cat => {
-                      const isAssigned = assignments.some(a => a.category_id === cat.id);
-                      const catChecklist = checklistItems.filter(ci => ci.category_id === cat.id);
-                      return (
-                        <div key={cat.id} className={`border rounded-lg p-4 transition-colors ${isAssigned ? 'border-primary-300 bg-primary-50' : 'border-gray-200'}`}>
-                          <div className="flex items-center justify-between">
-                            <label className="flex items-center space-x-3 cursor-pointer flex-1">
+              {showNewCategory && (
+                <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
+                  <p className="text-sm font-medium text-gray-700 mb-3">Nieuwe document categorie</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input type="text" placeholder="Naam (bijv. Loonheffing Q1)" className="input" value={newCatName} onChange={e => setNewCatName(e.target.value)} />
+                    <select className="input" value={newCatType} onChange={e => setNewCatType(e.target.value)}>
+                      <option value="btw_quarter">BTW kwartaal</option>
+                      <option value="annual_report">Jaarrekening</option>
+                      <option value="payroll">Loonadministratie</option>
+                      <option value="tax_return">Belastingaangifte</option>
+                      <option value="other">Overig</option>
+                    </select>
+                    <div className="flex space-x-2">
+                      <input type="number" placeholder="Jaar" className="input" value={newCatYear} onChange={e => setNewCatYear(parseInt(e.target.value))} />
+                      <button onClick={createCategory} className="btn-primary whitespace-nowrap">Toevoegen</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-sm text-gray-500 mb-4">Vink aan welke documenten deze klant moet inleveren en stel deadlines in.</p>
+
+              {categories.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">Geen document categorieën gevonden. Maak er een aan of voer de SQL uit in Supabase.</p>
+              ) : (
+                <div className="space-y-3">
+                  {categories.map(cat => {
+                    const isAssigned = assignments.some(a => a.category_id === cat.id);
+                    const catChecklist = checklistItems.filter(ci => ci.category_id === cat.id);
+                    return (
+                      <div key={cat.id} className={`border rounded-lg p-4 transition-colors ${isAssigned ? 'border-primary-300 bg-primary-50' : 'border-gray-200'}`}>
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center space-x-3 cursor-pointer flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isAssigned}
+                              onChange={() => toggleAssignment(cat.id)}
+                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                            />
+                            <div>
+                              <span className="font-medium text-gray-900">{cat.name}</span>
+                              <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                                {cat.category_type === 'btw_quarter' ? 'BTW' : cat.category_type === 'annual_report' ? 'Jaarrekening' : cat.category_type === 'tax_return' ? 'Aangifte' : cat.category_type === 'payroll' ? 'Loon' : 'Overig'}
+                              </span>
+                            </div>
+                          </label>
+                          {isAssigned && (
+                            <div className="flex items-center space-x-2">
+                              <CalendarDays className="w-4 h-4 text-gray-400" />
                               <input
-                                type="checkbox"
-                                checked={isAssigned}
-                                onChange={() => toggleAssignment(cat.id)}
-                                className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                type="date"
+                                value={assignDeadlines[cat.id] || ''}
+                                onChange={e => updateDeadline(cat.id, e.target.value)}
+                                className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-primary-500 focus:border-primary-500"
                               />
-                              <div>
-                                <span className="font-medium text-gray-900">{cat.name}</span>
-                                <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                                  {cat.category_type === 'btw_quarter' ? 'BTW' : cat.category_type === 'annual_report' ? 'Jaarrekening' : cat.category_type === 'tax_return' ? 'Aangifte' : cat.category_type}
-                                </span>
-                              </div>
-                            </label>
-                            {isAssigned && (
-                              <div className="flex items-center space-x-2">
-                                <CalendarDays className="w-4 h-4 text-gray-400" />
-                                <input
-                                  type="date"
-                                  value={assignDeadlines[cat.id] || ''}
-                                  onChange={e => updateDeadline(cat.id, e.target.value)}
-                                  className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-primary-500 focus:border-primary-500"
-                                />
-                                <button onClick={() => toggleAssignment(cat.id)} className="p-1 text-red-400 hover:text-red-600" title="Verwijderen">
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          {isAssigned && catChecklist.length > 0 && (
-                            <div className="mt-3 ml-7 space-y-1">
-                              {catChecklist.map(item => (
-                                <div key={item.id} className="flex items-center space-x-2 text-sm text-gray-600">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-                                  <span>{item.item_name}</span>
-                                  {item.is_required && <span className="text-xs text-red-500">*verplicht</span>}
-                                </div>
-                              ))}
+                              <button onClick={() => toggleAssignment(cat.id)} className="p-1 text-red-400 hover:text-red-600" title="Verwijderen">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        {isAssigned && catChecklist.length > 0 && (
+                          <div className="mt-3 ml-7 space-y-1">
+                            {catChecklist.map(item => (
+                              <div key={item.id} className="flex items-center space-x-2 text-sm text-gray-600">
+                                <div className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                                <span>{item.item_name}</span>
+                                {item.is_required && <span className="text-xs text-red-500">*verplicht</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-                {assignments.length > 0 && (
-                  <div className="mt-6 pt-4 border-t">
-                    <p className="text-sm text-gray-600">
-                      <span className="font-medium">{assignments.length}</span> {assignments.length === 1 ? 'categorie' : 'categorieën'} toegewezen aan deze klant
-                    </p>
-                  </div>
-                )}
+            {/* Berichten */}
+            <div className="card">
+              <div className="flex items-center space-x-3 mb-4">
+                <MessageSquare className="w-5 h-5 text-primary-600" />
+                <h3 className="text-lg font-bold text-gray-900">Berichten</h3>
               </div>
+
+              <div className="flex space-x-3 mb-4">
+                <textarea
+                  rows={2}
+                  className="input flex-1"
+                  placeholder="Schrijf een bericht aan deze klant..."
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                />
+                <button onClick={sendMessage} disabled={sendingMessage || !message.trim()} className="btn-primary self-end disabled:opacity-50 flex items-center space-x-2 h-10">
+                  <Send className="w-4 h-4" />
+                  <span>{sendingMessage ? 'Verzenden...' : 'Verstuur'}</span>
+                </button>
+              </div>
+
+              {messages.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">Nog geen berichten voor deze klant.</p>
+              ) : (
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {messages.map(msg => (
+                    <div key={msg.id} className="border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-sm text-gray-900">{msg.subject}</span>
+                        <span className="text-xs text-gray-500">{new Date(msg.created_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <p className="text-sm text-gray-600">{msg.description}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         )}
