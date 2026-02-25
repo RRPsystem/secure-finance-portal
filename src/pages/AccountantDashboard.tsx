@@ -386,16 +386,11 @@ export default function AccountantDashboard() {
     }
   }
 
-  function getStatusColor(score: number) {
-    if (score >= 80) return 'bg-green-100 text-green-800';
-    if (score >= 50) return 'bg-yellow-100 text-yellow-800';
-    return 'bg-red-100 text-red-800';
-  }
-
-  function getStatusIcon(score: number) {
-    if (score >= 80) return <CheckCircle className="w-5 h-5 text-green-600" />;
-    if (score >= 50) return <Clock className="w-5 h-5 text-yellow-600" />;
-    return <AlertTriangle className="w-5 h-5 text-red-600" />;
+  function getStatusLabel(score: number) {
+    if (score >= 80) return { label: 'Compleet', color: 'bg-green-100 text-green-800', icon: <CheckCircle className="w-4 h-4 text-green-600" /> };
+    if (score >= 50) return { label: 'In behandeling', color: 'bg-yellow-100 text-yellow-800', icon: <Clock className="w-4 h-4 text-yellow-600" /> };
+    if (score > 0) return { label: 'Actie nodig', color: 'bg-red-100 text-red-800', icon: <AlertTriangle className="w-4 h-4 text-red-600" /> };
+    return { label: 'Nieuw', color: 'bg-gray-100 text-gray-600', icon: <FileText className="w-4 h-4 text-gray-400" /> };
   }
 
   if (loading) {
@@ -554,7 +549,7 @@ export default function AccountantDashboard() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-gray-900">
-                      {clients.filter(c => c.completeness_score >= 50 && c.completeness_score < 80).length}
+                      {clients.filter(c => c.completeness_score > 0 && c.completeness_score < 80).length}
                     </p>
                     <p className="text-sm text-gray-600">In behandeling</p>
                   </div>
@@ -563,14 +558,14 @@ export default function AccountantDashboard() {
 
               <div className="card">
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                    <AlertTriangle className="w-6 h-6 text-red-600" />
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <FileText className="w-6 h-6 text-gray-500" />
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-gray-900">
-                      {clients.filter(c => c.completeness_score < 50).length}
+                      {clients.filter(c => c.completeness_score === 0).length}
                     </p>
-                    <p className="text-sm text-gray-600">Aandacht nodig</p>
+                    <p className="text-sm text-gray-600">Nieuw</p>
                   </div>
                 </div>
               </div>
@@ -637,12 +632,15 @@ export default function AccountantDashboard() {
                             </div>
                           </td>
                           <td className="py-3 px-4">
-                            <div className="flex items-center space-x-2">
-                              {getStatusIcon(client.completeness_score)}
-                              <span className={`text-sm font-medium ${getStatusColor(client.completeness_score)}`}>
-                                {client.completeness_score >= 80 ? 'Compleet' : client.completeness_score >= 50 ? 'Bezig' : 'Actie nodig'}
-                              </span>
-                            </div>
+                            {(() => {
+                              const s = getStatusLabel(client.completeness_score);
+                              return (
+                                <span className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${s.color}`}>
+                                  {s.icon}
+                                  <span>{s.label}</span>
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="py-3 px-4 text-right">
                             <span className="text-primary-600 hover:text-primary-700 font-medium text-sm">
@@ -698,21 +696,20 @@ export default function AccountantDashboard() {
                 return d >= now && d <= inWeek;
               });
 
-              if (noEmail) alerts.push({ type: 'warning', text: 'Geen emailadres ingevuld — berichten kunnen niet per email verstuurd worden.' });
-              if (noAssignments) alerts.push({ type: 'error', text: 'Geen document categorieën toegewezen. Wijs hieronder categorieën toe aan deze klant.' });
-              if (withoutDeadline.length > 0) {
-                const names = withoutDeadline.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
-                alerts.push({ type: 'warning', text: `${withoutDeadline.length} ${withoutDeadline.length === 1 ? 'categorie' : 'categorieën'} zonder deadline: ${names.join(', ')}` });
-              }
               if (overdue.length > 0) {
                 const names = overdue.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
                 alerts.push({ type: 'error', text: `${overdue.length} verlopen deadline${overdue.length > 1 ? 's' : ''}: ${names.join(', ')}` });
               }
               if (upcoming.length > 0) {
                 const names = upcoming.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
-                alerts.push({ type: 'info', text: `${upcoming.length} deadline${upcoming.length > 1 ? 's' : ''} deze week: ${names.join(', ')}` });
+                alerts.push({ type: 'warning', text: `${upcoming.length} deadline${upcoming.length > 1 ? 's' : ''} deze week: ${names.join(', ')}` });
               }
-              if (alerts.length === 0) alerts.push({ type: 'success', text: 'Alles ziet er goed uit. Geen openstaande actiepunten.' });
+              if (withoutDeadline.length > 0) {
+                const names = withoutDeadline.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
+                alerts.push({ type: 'info', text: `${withoutDeadline.length} ${withoutDeadline.length === 1 ? 'categorie' : 'categorieën'} zonder deadline: ${names.join(', ')}` });
+              }
+              if (noEmail && !noAssignments) alerts.push({ type: 'info', text: 'Tip: vul een emailadres in om documenten per email te versturen.' });
+              if (alerts.length === 0) alerts.push({ type: 'success', text: noAssignments ? 'Nieuwe klant — wijs hieronder documenten toe om te beginnen.' : 'Alles op orde. Geen openstaande actiepunten.' });
 
               const colorMap = { error: 'bg-red-50 border-red-200 text-red-800', warning: 'bg-yellow-50 border-yellow-200 text-yellow-800', info: 'bg-blue-50 border-blue-200 text-blue-800', success: 'bg-green-50 border-green-200 text-green-800' };
               const iconMap = { error: <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />, warning: <Clock className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />, info: <CalendarDays className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />, success: <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" /> };
