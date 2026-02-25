@@ -43,6 +43,7 @@ export default function AccountantDashboard() {
   const [newReqDesc, setNewReqDesc] = useState('');
   const [newReqDeadline, setNewReqDeadline] = useState('');
   const [sendingRequests, setSendingRequests] = useState(false);
+  const [sendIntro, setSendIntro] = useState('');
   const [docSets, setDocSets] = useState<DocumentSet[]>([]);
   const [docSetItems, setDocSetItems] = useState<DocumentSetItem[]>([]);
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
@@ -335,6 +336,7 @@ export default function AccountantDashboard() {
             </div>
             <div style="padding:20px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px">
               <p>Beste ${selectedClient.contact_person},</p>
+              ${sendIntro.trim() ? `<p style="white-space:pre-line">${sendIntro.trim()}</p>` : ''}
               <p>Wij hebben de volgende documenten van u nodig:</p>
               <table style="width:100%;border-collapse:collapse;margin:15px 0">
                 <thead>
@@ -365,6 +367,7 @@ export default function AccountantDashboard() {
         await supabase.from('document_requests').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', r.id);
       }
       await loadDocRequests(selectedClient.id);
+      setSendIntro('');
       alert(`Documentoverzicht (${allItems.length} items) verstuurd naar ${clientEmail}`);
     } catch (err: any) {
       alert('Fout bij verzenden: ' + err.message);
@@ -1169,9 +1172,16 @@ export default function AccountantDashboard() {
                 </div>
               )}
 
-              {/* Verstuur knop */}
+              {/* Verstuur met voorwoord */}
               <div className="border-t border-gray-200 pt-4">
-                <p className="text-sm text-gray-500 mb-3">Stap 3: Verstuur het complete overzicht per email naar de klant.</p>
+                <p className="text-sm text-gray-500 mb-2">Stap 3: Schrijf een persoonlijk bericht en verstuur alles per email.</p>
+                <textarea
+                  rows={3}
+                  className="input w-full mb-3 text-sm"
+                  placeholder="Voorwoord (optioneel) — bijv. 'Graag ontvangen wij onderstaande documenten voor uw IB aangifte 2024. De deadline is 1 mei.'"
+                  value={sendIntro}
+                  onChange={e => setSendIntro(e.target.value)}
+                />
                 <button
                   onClick={sendDocRequestsEmail}
                   disabled={sendingRequests || (assignments.length === 0 && docRequests.filter(r => r.status === 'pending').length === 0)}
@@ -1181,7 +1191,7 @@ export default function AccountantDashboard() {
                   <span>{sendingRequests ? 'Verzenden...' : `Verstuur documentoverzicht naar klant (${assignments.length + docRequests.filter(r => r.status === 'pending').length} items)`}</span>
                 </button>
                 {(!selectedClient?.email && !formData.email) && (
-                  <p className="text-xs text-red-500 mt-2 text-center">⚠ Vul eerst een emailadres in bij Bedrijfsgegevens</p>
+                  <p className="text-xs text-red-500 mt-2 text-center">Vul eerst een emailadres in bij Bedrijfsgegevens</p>
                 )}
               </div>
             </div>
