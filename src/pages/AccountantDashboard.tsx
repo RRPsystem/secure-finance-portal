@@ -53,6 +53,7 @@ export default function AccountantDashboard() {
   const [newItemDesc, setNewItemDesc] = useState('');
   const [applyingSet, setApplyingSet] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{email: string; password: string; url: string} | null>(null);
 
   const emptyForm = { company_name: '', contact_person: '', email: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -259,7 +260,7 @@ export default function AccountantDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Uitnodigen mislukt');
-      alert(`✅ Account aangemaakt voor ${clientEmail}\n\nTijdelijk wachtwoord: ${data.tempPassword}\n\nDeel dit wachtwoord met de klant. Ze kunnen inloggen op ${window.location.origin}`);
+      setInviteResult({ email: clientEmail, password: data.tempPassword, url: window.location.origin });
       await loadClients();
       // Refresh selected client
       const updated = (await supabase.from('clients').select('*').eq('id', selectedClient.id).single()).data;
@@ -925,6 +926,50 @@ export default function AccountantDashboard() {
                 </button>
               )}
             </div>
+
+            {/* Inloggegevens na uitnodiging */}
+            {inviteResult && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-5 mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                    <h3 className="font-bold text-green-900">Account aangemaakt</h3>
+                  </div>
+                  <button onClick={() => setInviteResult(null)} className="text-green-600 hover:text-green-800 text-sm">Sluiten</button>
+                </div>
+                <p className="text-sm text-green-800 mb-3">Deel deze gegevens met de klant:</p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between bg-white rounded-lg px-4 py-2 border border-green-200">
+                    <div>
+                      <span className="text-xs text-gray-500 block">Inlog URL</span>
+                      <span className="text-sm font-mono text-gray-900">{inviteResult.url}</span>
+                    </div>
+                    <button onClick={() => { navigator.clipboard.writeText(inviteResult.url); }} className="text-xs text-primary-600 hover:text-primary-800 font-medium px-2 py-1 rounded hover:bg-primary-50">Kopieer</button>
+                  </div>
+                  <div className="flex items-center justify-between bg-white rounded-lg px-4 py-2 border border-green-200">
+                    <div>
+                      <span className="text-xs text-gray-500 block">E-mail</span>
+                      <span className="text-sm font-mono text-gray-900">{inviteResult.email}</span>
+                    </div>
+                    <button onClick={() => { navigator.clipboard.writeText(inviteResult.email); }} className="text-xs text-primary-600 hover:text-primary-800 font-medium px-2 py-1 rounded hover:bg-primary-50">Kopieer</button>
+                  </div>
+                  <div className="flex items-center justify-between bg-white rounded-lg px-4 py-2 border border-green-200">
+                    <div>
+                      <span className="text-xs text-gray-500 block">Tijdelijk wachtwoord</span>
+                      <span className="text-sm font-mono font-bold text-gray-900">{inviteResult.password}</span>
+                    </div>
+                    <button onClick={() => { navigator.clipboard.writeText(inviteResult.password); }} className="text-xs text-primary-600 hover:text-primary-800 font-medium px-2 py-1 rounded hover:bg-primary-50">Kopieer</button>
+                  </div>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(`Inloggen: ${inviteResult.url}\nE-mail: ${inviteResult.email}\nWachtwoord: ${inviteResult.password}`); }}
+                    className="w-full mt-2 py-2 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg flex items-center justify-center space-x-2"
+                  >
+                    <Copy className="w-4 h-4" />
+                    <span>Kopieer alles</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Status overzicht + actiepunten */}
             {(() => {
