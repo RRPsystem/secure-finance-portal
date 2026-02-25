@@ -198,18 +198,44 @@ export default function AccountantDashboard() {
       alert('Vul eerst een emailadres in bij de bedrijfsgegevens.');
       return;
     }
-    const pending = docRequests.filter(r => r.status === 'pending');
-    if (pending.length === 0) {
-      alert('Geen openstaande verzoeken om te versturen.');
+
+    // Combine assigned categories + custom requests into one list
+    const allItems: Array<{title: string; description: string; deadline: string}> = [];
+
+    // 1. Category assignments
+    for (const a of assignments) {
+      const cat = categories.find(c => c.id === a.category_id);
+      if (cat) {
+        allItems.push({
+          title: cat.name,
+          description: cat.category_type === 'btw_quarter' ? 'BTW aangifte' : cat.category_type === 'annual_report' ? 'Jaarrekening' : cat.category_type === 'tax_return' ? 'Belastingaangifte' : cat.category_type === 'payroll' ? 'Loonadministratie' : 'Document',
+          deadline: a.deadline ? new Date(a.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Geen deadline',
+        });
+      }
+    }
+
+    // 2. Custom document requests (pending only)
+    const pendingReqs = docRequests.filter(r => r.status === 'pending');
+    for (const r of pendingReqs) {
+      allItems.push({
+        title: r.title,
+        description: r.description || '-',
+        deadline: r.deadline ? new Date(r.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Geen deadline',
+      });
+    }
+
+    if (allItems.length === 0) {
+      alert('Geen documenten om te versturen. Vink eerst categorieën aan of voeg documenten toe.');
       return;
     }
+
     setSendingRequests(true);
     try {
-      const itemsHtml = pending.map(r =>
+      const itemsHtml = allItems.map(r =>
         `<tr>
           <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">${r.title}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280">${r.description || '-'}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#dc2626">${r.deadline ? new Date(r.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Geen deadline'}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;color:#6b7280">${r.description}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#dc2626">${r.deadline}</td>
         </tr>`
       ).join('');
 
@@ -247,17 +273,16 @@ export default function AccountantDashboard() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Email verzenden mislukt');
+        const errData = await res.json();
+        throw new Error(errData.error || 'Email verzenden mislukt');
       }
 
-      // Mark requests as sent
-      const ids = pending.map(r => r.id);
-      for (const id of ids) {
-        await supabase.from('document_requests').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', id);
+      // Mark custom requests as sent
+      for (const r of pendingReqs) {
+        await supabase.from('document_requests').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', r.id);
       }
       await loadDocRequests(selectedClient.id);
-      alert(`Documentverzoek verstuurd naar ${clientEmail}`);
+      alert(`Documentoverzicht (${allItems.length} items) verstuurd naar ${clientEmail}`);
     } catch (err: any) {
       alert('Fout bij verzenden: ' + err.message);
     } finally {
@@ -780,96 +805,12 @@ export default function AccountantDashboard() {
               )}
             </div>
 
-            {/* Documentverzoeken */}
-            <div className="card mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  <FileText className="w-5 h-5 text-primary-600" />
-                  <h3 className="text-lg font-bold text-gray-900">Documentverzoeken</h3>
-                </div>
-                {docRequests.filter(r => r.status === 'pending').length > 0 && (
-                  <button onClick={sendDocRequestsEmail} disabled={sendingRequests} className="btn-primary disabled:opacity-50 flex items-center space-x-2 text-sm">
-                    <Send className="w-4 h-4" />
-                    <span>{sendingRequests ? 'Verzenden...' : `Verstuur naar klant (${docRequests.filter(r => r.status === 'pending').length})`}</span>
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-gray-500 mb-4">Voeg specifieke documenten toe die de klant moet inleveren en verstuur het overzicht per email.</p>
-
-              <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                  <div className="md:col-span-4">
-                    <input type="text" placeholder="Document (bijv. Jaaropgave bank 2024)" className="input" value={newReqTitle} onChange={e => setNewReqTitle(e.target.value)} />
-                  </div>
-                  <div className="md:col-span-4">
-                    <input type="text" placeholder="Toelichting (optioneel)" className="input" value={newReqDesc} onChange={e => setNewReqDesc(e.target.value)} />
-                  </div>
-                  <div className="md:col-span-2">
-                    <input type="date" className="input" value={newReqDeadline} onChange={e => setNewReqDeadline(e.target.value)} />
-                  </div>
-                  <div className="md:col-span-2">
-                    <button onClick={addDocRequest} disabled={!newReqTitle.trim()} className="btn-primary w-full disabled:opacity-50">
-                      <Plus className="w-4 h-4 mr-1 inline" />Toevoegen
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {docRequests.length === 0 ? (
-                <p className="text-gray-500 text-center py-4 text-sm">Nog geen documentverzoeken. Voeg hierboven documenten toe die de klant moet inleveren.</p>
-              ) : (
-                <div className="space-y-2">
-                  {docRequests.map(req => {
-                    const statusColors: Record<string, string> = {
-                      pending: 'bg-yellow-100 text-yellow-800',
-                      sent: 'bg-blue-100 text-blue-800',
-                      received: 'bg-green-100 text-green-800',
-                      approved: 'bg-green-100 text-green-800',
-                      rejected: 'bg-red-100 text-red-800',
-                    };
-                    const statusLabels: Record<string, string> = {
-                      pending: 'Nog niet verstuurd',
-                      sent: 'Verstuurd',
-                      received: 'Ontvangen',
-                      approved: 'Goedgekeurd',
-                      rejected: 'Afgekeurd',
-                    };
-                    return (
-                      <div key={req.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-medium text-gray-900">{req.title}</span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[req.status] || 'bg-gray-100 text-gray-600'}`}>
-                              {statusLabels[req.status] || req.status}
-                            </span>
-                          </div>
-                          <div className="flex items-center space-x-3 mt-1 text-xs text-gray-500">
-                            {req.description && <span>{req.description}</span>}
-                            {req.deadline && (
-                              <span className="flex items-center space-x-1">
-                                <CalendarDays className="w-3 h-3" />
-                                <span>Deadline: {new Date(req.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                              </span>
-                            )}
-                            {req.sent_at && <span>Verstuurd: {new Date(req.sent_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>}
-                          </div>
-                        </div>
-                        <button onClick={() => deleteDocRequest(req.id)} className="p-1 text-red-400 hover:text-red-600 ml-2" title="Verwijderen">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Documenten & Deadlines */}
+            {/* Documenten voor klant - geïntegreerde sectie */}
             <div className="card mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <ClipboardList className="w-5 h-5 text-primary-600" />
-                  <h3 className="text-lg font-bold text-gray-900">Documenten & Deadlines</h3>
+                  <h3 className="text-lg font-bold text-gray-900">Documenten voor klant</h3>
                 </div>
                 <button onClick={() => setShowNewCategory(!showNewCategory)} className="text-sm text-primary-600 hover:text-primary-700 flex items-center space-x-1">
                   <Plus className="w-4 h-4" />
@@ -897,17 +838,17 @@ export default function AccountantDashboard() {
                 </div>
               )}
 
-              <p className="text-sm text-gray-500 mb-4">Vink aan welke documenten deze klant moet inleveren en stel deadlines in.</p>
+              <p className="text-sm text-gray-500 mb-2">Stap 1: Vink categorieën aan en stel deadlines in.</p>
 
               {categories.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">Geen document categorieën gevonden. Maak er een aan of voer de SQL uit in Supabase.</p>
+                <p className="text-gray-500 text-center py-4">Geen document categorieën gevonden.</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2 mb-6">
                   {categories.map(cat => {
                     const isAssigned = assignments.some(a => a.category_id === cat.id);
                     const catChecklist = checklistItems.filter(ci => ci.category_id === cat.id);
                     return (
-                      <div key={cat.id} className={`border rounded-lg p-4 transition-colors ${isAssigned ? 'border-primary-300 bg-primary-50' : 'border-gray-200'}`}>
+                      <div key={cat.id} className={`border rounded-lg p-3 transition-colors ${isAssigned ? 'border-primary-300 bg-primary-50' : 'border-gray-200'}`}>
                         <div className="flex items-center justify-between">
                           <label className="flex items-center space-x-3 cursor-pointer flex-1">
                             <input
@@ -939,7 +880,7 @@ export default function AccountantDashboard() {
                           )}
                         </div>
                         {isAssigned && catChecklist.length > 0 && (
-                          <div className="mt-3 ml-7 space-y-1">
+                          <div className="mt-2 ml-7 space-y-1">
                             {catChecklist.map(item => (
                               <div key={item.id} className="flex items-center space-x-2 text-sm text-gray-600">
                                 <div className="w-1.5 h-1.5 rounded-full bg-gray-400" />
@@ -954,6 +895,80 @@ export default function AccountantDashboard() {
                   })}
                 </div>
               )}
+
+              {/* Extra documenten toevoegen */}
+              <div className="border-t border-gray-200 pt-4 mb-4">
+                <p className="text-sm text-gray-500 mb-2">Stap 2: Voeg eventueel extra specifieke documenten toe.</p>
+                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                    <div className="md:col-span-4">
+                      <input type="text" placeholder="Document (bijv. Jaaropgave bank 2024)" className="input text-sm" value={newReqTitle} onChange={e => setNewReqTitle(e.target.value)} />
+                    </div>
+                    <div className="md:col-span-4">
+                      <input type="text" placeholder="Toelichting (optioneel)" className="input text-sm" value={newReqDesc} onChange={e => setNewReqDesc(e.target.value)} />
+                    </div>
+                    <div className="md:col-span-2">
+                      <input type="date" className="input text-sm" value={newReqDeadline} onChange={e => setNewReqDeadline(e.target.value)} />
+                    </div>
+                    <div className="md:col-span-2">
+                      <button onClick={addDocRequest} disabled={!newReqTitle.trim()} className="btn-primary w-full disabled:opacity-50 text-sm">
+                        <Plus className="w-3 h-3 mr-1 inline" />Toevoegen
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lijst van custom items */}
+              {docRequests.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {docRequests.map(req => {
+                    const statusColors: Record<string, string> = { pending: 'bg-yellow-100 text-yellow-800', sent: 'bg-blue-100 text-blue-800', received: 'bg-green-100 text-green-800', approved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800' };
+                    const statusLabels: Record<string, string> = { pending: 'Nog niet verstuurd', sent: 'Verstuurd', received: 'Ontvangen', approved: 'Goedgekeurd', rejected: 'Afgekeurd' };
+                    return (
+                      <div key={req.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium text-gray-900 text-sm">{req.title}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[req.status] || 'bg-gray-100 text-gray-600'}`}>
+                              {statusLabels[req.status] || req.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-3 mt-1 text-xs text-gray-500">
+                            {req.description && <span>{req.description}</span>}
+                            {req.deadline && (
+                              <span className="flex items-center space-x-1">
+                                <CalendarDays className="w-3 h-3" />
+                                <span>{new Date(req.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                              </span>
+                            )}
+                            {req.sent_at && <span>Verstuurd: {new Date(req.sent_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>}
+                          </div>
+                        </div>
+                        <button onClick={() => deleteDocRequest(req.id)} className="p-1 text-red-400 hover:text-red-600 ml-2" title="Verwijderen">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Verstuur knop */}
+              <div className="border-t border-gray-200 pt-4">
+                <p className="text-sm text-gray-500 mb-3">Stap 3: Verstuur het complete overzicht per email naar de klant.</p>
+                <button
+                  onClick={sendDocRequestsEmail}
+                  disabled={sendingRequests || (assignments.length === 0 && docRequests.filter(r => r.status === 'pending').length === 0)}
+                  className="btn-primary w-full disabled:opacity-50 flex items-center justify-center space-x-2 py-3"
+                >
+                  <Send className="w-5 h-5" />
+                  <span>{sendingRequests ? 'Verzenden...' : `Verstuur documentoverzicht naar klant (${assignments.length + docRequests.filter(r => r.status === 'pending').length} items)`}</span>
+                </button>
+                {(!selectedClient?.email && !formData.email) && (
+                  <p className="text-xs text-red-500 mt-2 text-center">⚠ Vul eerst een emailadres in bij Bedrijfsgegevens</p>
+                )}
+              </div>
             </div>
 
             {/* Berichten */}
