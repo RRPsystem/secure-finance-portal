@@ -17,13 +17,9 @@ export default function Login() {
     try {
       await signIn(email, password);
     } catch (err: any) {
-      // Filter out database schema errors
       const errorMessage = err.message || '';
-      if (errorMessage.includes('querying schema') || errorMessage.includes('permission denied')) {
-        setError('Inloggen mislukt. Controleer je email en wachtwoord.');
-      } else {
-        setError(errorMessage || 'Inloggen mislukt. Controleer je gegevens.');
-      }
+      console.error('Login error:', err);
+      setError(errorMessage || 'Inloggen mislukt. Controleer je gegevens.');
     } finally {
       setLoading(false);
     }
