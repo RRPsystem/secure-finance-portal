@@ -134,6 +134,30 @@ export default function AccountantDashboard() {
     URL.revokeObjectURL(url);
   }
 
+  async function deleteDocument(docId: string, filePath: string) {
+    if (!confirm('Weet je zeker dat je dit document wilt verwijderen?')) return;
+    
+    try {
+      // Delete from storage
+      await supabase.storage
+        .from('client-documents')
+        .remove([filePath]);
+      
+      // Delete from database
+      await supabase
+        .from('client_documents')
+        .delete()
+        .eq('id', docId);
+      
+      // Reload documents
+      if (selectedClient) {
+        await loadClientDocuments(selectedClient.id);
+      }
+    } catch (error: any) {
+      alert('Fout bij verwijderen: ' + error.message);
+    }
+  }
+
   async function loadDocumentData(clientId: string) {
     const [catRes, assignRes, checkRes] = await Promise.all([
       supabase.from('document_categories').select('*').eq('is_active', true).order('year', { ascending: false }).order('sort_order'),
@@ -1339,6 +1363,13 @@ export default function AccountantDashboard() {
                             >
                               <Download className="w-4 h-4" />
                               <span className="text-sm">Download</span>
+                            </button>
+                            <button 
+                              onClick={() => deleteDocument(doc.id, doc.file_path)}
+                              className="p-1 text-red-400 hover:text-red-600"
+                              title="Verwijderen"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
