@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy, UserPlus } from 'lucide-react';
+import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy, UserPlus, Download, File } from 'lucide-react';
 import type { Client, DocumentCategory, ClientDocumentAssignment, DocumentChecklist, DocumentSet, DocumentSetItem } from '../types/database.types';
 
 type View = 'list' | 'new' | 'detail' | 'sets';
@@ -54,6 +54,7 @@ export default function AccountantDashboard() {
   const [applyingSet, setApplyingSet] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState<{email: string; password: string; url: string} | null>(null);
+  const [clientDocuments, setClientDocuments] = useState<Array<{id: string; file_name: string; file_path: string; file_size: number; file_type: string; uploaded_at: string; status: string; request_id: string}>>([]);
 
   const emptyForm = { company_name: '', contact_person: '', email: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -100,7 +101,37 @@ export default function AccountantDashboard() {
     });
     setView('detail');
     setDetailsOpen(false);
-    await Promise.all([loadDocumentData(client.id), loadMessages(client.id), loadDocRequests(client.id), loadSets()]);
+    await Promise.all([loadDocumentData(client.id), loadMessages(client.id), loadDocRequests(client.id), loadSets(), loadClientDocuments(client.id)]);
+  }
+
+  async function loadClientDocuments(clientId: string) {
+    const { data } = await supabase
+      .from('client_documents')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('uploaded_at', { ascending: false });
+    if (data) setClientDocuments(data);
+  }
+
+  async function downloadDocument(filePath: string, fileName: string) {
+    const { data, error } = await supabase.storage
+      .from('client-documents')
+      .download(filePath);
+    
+    if (error) {
+      alert('Fout bij downloaden: ' + error.message);
+      return;
+    }
+    
+    // Create download link
+    const url = URL.createObjectURL(data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   async function loadDocumentData(clientId: string) {
@@ -1272,6 +1303,48 @@ export default function AccountantDashboard() {
                       </div>
                     );
                   })}
+                </div>
+              )}
+
+              {/* Geüploade documenten van klant */}
+              {clientDocuments.length > 0 && (
+                <div className="border-t border-gray-200 pt-4 mb-4">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <File className="w-4 h-4 text-green-600" />
+                    <h4 className="font-medium text-gray-900">Ontvangen documenten ({clientDocuments.length})</h4>
+                  </div>
+                  <div className="space-y-2">
+                    {clientDocuments.map(doc => {
+                      const relatedRequest = docRequests.find(r => r.id === doc.request_id);
+                      return (
+                        <div key={doc.id} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <FileText className="w-5 h-5 text-green-600" />
+                            <div>
+                              <p className="font-medium text-gray-900 text-sm">{doc.file_name}</p>
+                              <div className="flex items-center space-x-2 text-xs text-gray-500">
+                                {relatedRequest && <span>Voor: {relatedRequest.title}</span>}
+                                <span>•</span>
+                                <span>{new Date(doc.uploaded_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                                <span>•</span>
+                                <span>{(doc.file_size / 1024).toFixed(0)} KB</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <button 
+                              onClick={() => downloadDocument(doc.file_path, doc.file_name)}
+                              className="flex items-center space-x-1 text-sf-taupe hover:text-sf-brown px-2 py-1 rounded"
+                              title="Downloaden"
+                            >
+                              <Download className="w-4 h-4" />
+                              <span className="text-sm">Download</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 

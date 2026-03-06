@@ -141,17 +141,20 @@ export default function ClientDashboard() {
       const filePath = `${client.id}/${selectedRequest.id}/${Date.now()}_${file.name}`;
       
       // Upload to Supabase Storage (secure bucket with RLS)
-      const { error: uploadError } = await supabase.storage
+      const { error: storageError } = await supabase.storage
         .from('client-documents')
         .upload(filePath, file, {
           cacheControl: '3600',
           upsert: false
         });
       
-      if (uploadError) throw uploadError;
+      if (storageError) {
+        console.error('Storage error:', storageError);
+        throw new Error(`Upload mislukt: ${storageError.message}`);
+      }
       
       // Create document record in database
-      await supabase
+      const { error: dbError } = await supabase
         .from('client_documents')
         .insert({
           client_id: client.id,
@@ -160,14 +163,24 @@ export default function ClientDashboard() {
           file_path: filePath,
           file_size: file.size,
           file_type: file.type,
-          uploaded_by: user?.id
+          uploaded_by: user?.id,
+          status: 'uploaded'
         });
       
+      if (dbError) {
+        console.error('Database error:', dbError);
+        throw new Error(`Database fout: ${dbError.message}`);
+      }
+      
       // Update request status
-      await supabase
+      const { error: updateError } = await supabase
         .from('document_requests')
         .update({ status: 'completed' })
         .eq('id', selectedRequest.id);
+      
+      if (updateError) {
+        console.error('Update error:', updateError);
+      }
       
       setUploadSuccess(true);
       
