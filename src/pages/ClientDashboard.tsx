@@ -99,9 +99,10 @@ export default function ClientDashboard() {
     .filter(r => r.deadline)
     .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())[0];
 
-  // Check if request is an "uitstel" type (based on title containing "uitstel")
+  // Check if request is an "uitstel" type (based on title containing "uitstel" or "uitsle")
   function isUitstelRequest(request: DocumentRequest): boolean {
-    return request.title.toLowerCase().includes('uitstel');
+    const title = request.title.toLowerCase();
+    return title.includes('uitstel') || title.includes('uitsle');
   }
 
   // Handle uitstel response (ja/nee)
