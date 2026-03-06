@@ -94,7 +94,7 @@ export default function ClientDashboard() {
   }
 
   const pendingRequests = documentRequests.filter(r => r.status === 'pending' || r.status === 'sent');
-  const completedRequests = documentRequests.filter(r => r.status === 'completed');
+  const completedRequests = documentRequests.filter(r => r.status === 'received' || r.status === 'approved');
   
   // Find the nearest deadline
   const nearestDeadline = pendingRequests
@@ -114,7 +114,7 @@ export default function ClientDashboard() {
       const { error } = await supabase
         .from('document_requests')
         .update({ 
-          status: 'completed',
+          status: 'received',
           response: response === 'ja' ? 'Ja' : 'Nee'
         })
         .eq('id', request.id);
@@ -184,7 +184,7 @@ export default function ClientDashboard() {
       // Update request status
       const { error: updateError } = await supabase
         .from('document_requests')
-        .update({ status: 'completed' })
+        .update({ status: 'received' })
         .eq('id', selectedRequest.id);
       
       if (updateError) {
