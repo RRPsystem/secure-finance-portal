@@ -624,7 +624,9 @@ export default function AccountantDashboard() {
               <img 
                 src="/logo.png" 
                 alt="Secure Finance" 
-                className="h-10 w-auto brightness-0 invert"
+                className="h-10 w-auto"
+                style={{ filter: 'brightness(0) invert(1)' }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
               <div className="hidden sm:block border-l border-white/30 pl-4">
                 <p className="text-sm text-white/80">Boekhouder Dashboard</p>
