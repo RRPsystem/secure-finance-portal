@@ -38,7 +38,7 @@ export default function Login() {
             <img 
               src="/logo.png" 
               alt="Secure Finance" 
-              className="h-24 w-auto brightness-0 invert"
+              className="h-24 w-auto"
             />
           </div>
           
