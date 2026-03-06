@@ -68,7 +68,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.error('Error loading user profile:', error);
+        console.error('Error loading user profile:', error.message, error.details, error.hint);
+        // Show more specific error to user for debugging
+        alert('Database error: ' + error.message + ' | Code: ' + error.code);
         setUser(null);
         setLoading(false);
         return;
