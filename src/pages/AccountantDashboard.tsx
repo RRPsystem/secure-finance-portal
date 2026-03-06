@@ -524,7 +524,7 @@ export default function AccountantDashboard() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sf-taupe"></div>
       </div>
     );
   }
@@ -534,7 +534,7 @@ export default function AccountantDashboard() {
       <form onSubmit={handleSaveClient} className="space-y-6">
         <div className="card">
           <div className="flex items-center space-x-3 mb-6">
-            <Building2 className="w-5 h-5 text-primary-600" />
+            <Building2 className="w-5 h-5 text-sf-taupe" />
             <h3 className="text-lg font-bold text-gray-900">Bedrijfsgegevens</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -551,7 +551,7 @@ export default function AccountantDashboard() {
 
         <div className="card">
           <div className="flex items-center space-x-3 mb-6">
-            <Phone className="w-5 h-5 text-primary-600" />
+            <Phone className="w-5 h-5 text-sf-taupe" />
             <h3 className="text-lg font-bold text-gray-900">Contactgegevens</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -580,7 +580,7 @@ export default function AccountantDashboard() {
 
         <div className="card">
           <div className="flex items-center space-x-3 mb-6">
-            <FileText className="w-5 h-5 text-primary-600" />
+            <FileText className="w-5 h-5 text-sf-taupe" />
             <h3 className="text-lg font-bold text-gray-900">Zakelijke gegevens</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -616,25 +616,27 @@ export default function AccountantDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
+    <div className="min-h-screen bg-sf-cream">
+      <header className="bg-sf-brown shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-bold">SF</span>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Secure Finance - Boekhouder</h1>
-                <p className="text-sm text-gray-600">{user?.email}</p>
+              <img 
+                src="/logo.png" 
+                alt="Secure Finance" 
+                className="h-10 w-auto brightness-0 invert"
+              />
+              <div className="hidden sm:block border-l border-white/30 pl-4">
+                <p className="text-sm text-white/80">Boekhouder Dashboard</p>
+                <p className="text-white font-medium">{user?.email}</p>
               </div>
             </div>
             <button
               onClick={() => signOut()}
-              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
+              className="flex items-center space-x-2 text-white/80 hover:text-white transition-colors"
             >
               <LogOut className="w-5 h-5" />
-              <span>Uitloggen</span>
+              <span className="hidden sm:inline">Uitloggen</span>
             </button>
           </div>
         </div>
@@ -644,14 +646,14 @@ export default function AccountantDashboard() {
         {view === 'list' && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-              <div className="card">
+              <div className="bg-gradient-to-br from-sf-taupe to-sf-sand rounded-xl shadow-lg p-5 text-white">
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
-                    <Users className="w-6 h-6 text-primary-600" />
+                  <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+                    <Users className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">{clients.length}</p>
-                    <p className="text-sm text-gray-600">Actieve klanten</p>
+                    <p className="text-2xl font-bold">{clients.length}</p>
+                    <p className="text-sm text-white/80">Actieve klanten</p>
                   </div>
                 </div>
               </div>
@@ -662,7 +664,7 @@ export default function AccountantDashboard() {
                     <CheckCircle className="w-6 h-6 text-green-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-2xl font-bold text-sf-black">
                       {clients.filter(c => c.completeness_score >= 80).length}
                     </p>
                     <p className="text-sm text-gray-600">Compleet</p>
@@ -672,11 +674,11 @@ export default function AccountantDashboard() {
 
               <div className="card">
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                    <Clock className="w-6 h-6 text-yellow-600" />
+                  <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
+                    <Clock className="w-6 h-6 text-amber-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-2xl font-bold text-sf-black">
                       {clients.filter(c => c.completeness_score > 0 && c.completeness_score < 80).length}
                     </p>
                     <p className="text-sm text-gray-600">In behandeling</p>
@@ -690,7 +692,7 @@ export default function AccountantDashboard() {
                     <FileText className="w-6 h-6 text-gray-500" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-2xl font-bold text-sf-black">
                       {clients.filter(c => c.completeness_score === 0).length}
                     </p>
                     <p className="text-sm text-gray-600">Nieuw</p>
@@ -742,7 +744,7 @@ export default function AccountantDashboard() {
                           </td>
                           <td className="py-3 px-4 text-gray-700">{client.contact_person}</td>
                           <td className="py-3 px-4">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-sf-beige text-sf-brown">
                               {client.subscription_type === 'abonnement' ? 'Abonnement' : 'Per opdracht'}
                             </span>
                           </td>
@@ -777,7 +779,7 @@ export default function AccountantDashboard() {
                             })()}
                           </td>
                           <td className="py-3 px-4 text-right">
-                            <span className="text-primary-600 hover:text-primary-700 font-medium text-sm">
+                            <span className="text-sf-taupe hover:text-sf-brown font-medium text-sm">
                               Bekijk details
                             </span>
                           </td>
@@ -852,9 +854,9 @@ export default function AccountantDashboard() {
                           {isOpen ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
                           <div>
                             <div className="flex items-center space-x-2">
-                              <Package className="w-4 h-4 text-primary-600" />
+                              <Package className="w-4 h-4 text-sf-taupe" />
                               <span className="font-bold text-gray-900">{set.name}</span>
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-primary-100 text-primary-700">{items.length} documenten</span>
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-sf-beige text-sf-brown">{items.length} documenten</span>
                             </div>
                             {set.description && <p className="text-sm text-gray-500 mt-0.5 ml-6">{set.description}</p>}
                           </div>
@@ -920,7 +922,7 @@ export default function AccountantDashboard() {
                   <span>Klant heeft account</span>
                 </span>
               ) : (
-                <button onClick={inviteClient} disabled={inviting} className="flex items-center space-x-2 px-4 py-2 border border-primary-300 bg-primary-50 rounded-lg text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50">
+                <button onClick={inviteClient} disabled={inviting} className="flex items-center space-x-2 px-4 py-2 border border-sf-taupe bg-sf-beige rounded-lg text-sm font-medium text-sf-brown hover:bg-sf-sand disabled:opacity-50">
                   <UserPlus className="w-4 h-4" />
                   <span>{inviting ? 'Bezig...' : 'Klant uitnodigen'}</span>
                 </button>
@@ -944,21 +946,21 @@ export default function AccountantDashboard() {
                       <span className="text-xs text-gray-500 block">Inlog URL</span>
                       <span className="text-sm font-mono text-gray-900">{inviteResult.url}</span>
                     </div>
-                    <button onClick={() => { navigator.clipboard.writeText(inviteResult.url); }} className="text-xs text-primary-600 hover:text-primary-800 font-medium px-2 py-1 rounded hover:bg-primary-50">Kopieer</button>
+                    <button onClick={() => { navigator.clipboard.writeText(inviteResult.url); }} className="text-xs text-sf-taupe hover:text-sf-brown-dark font-medium px-2 py-1 rounded hover:bg-sf-beige">Kopieer</button>
                   </div>
                   <div className="flex items-center justify-between bg-white rounded-lg px-4 py-2 border border-green-200">
                     <div>
                       <span className="text-xs text-gray-500 block">E-mail</span>
                       <span className="text-sm font-mono text-gray-900">{inviteResult.email}</span>
                     </div>
-                    <button onClick={() => { navigator.clipboard.writeText(inviteResult.email); }} className="text-xs text-primary-600 hover:text-primary-800 font-medium px-2 py-1 rounded hover:bg-primary-50">Kopieer</button>
+                    <button onClick={() => { navigator.clipboard.writeText(inviteResult.email); }} className="text-xs text-sf-taupe hover:text-sf-brown-dark font-medium px-2 py-1 rounded hover:bg-sf-beige">Kopieer</button>
                   </div>
                   <div className="flex items-center justify-between bg-white rounded-lg px-4 py-2 border border-green-200">
                     <div>
                       <span className="text-xs text-gray-500 block">Tijdelijk wachtwoord</span>
                       <span className="text-sm font-mono font-bold text-gray-900">{inviteResult.password}</span>
                     </div>
-                    <button onClick={() => { navigator.clipboard.writeText(inviteResult.password); }} className="text-xs text-primary-600 hover:text-primary-800 font-medium px-2 py-1 rounded hover:bg-primary-50">Kopieer</button>
+                    <button onClick={() => { navigator.clipboard.writeText(inviteResult.password); }} className="text-xs text-sf-taupe hover:text-sf-brown-dark font-medium px-2 py-1 rounded hover:bg-sf-beige">Kopieer</button>
                   </div>
                   <button
                     onClick={() => { navigator.clipboard.writeText(`Inloggen: ${inviteResult.url}\nE-mail: ${inviteResult.email}\nWachtwoord: ${inviteResult.password}`); }}
@@ -1027,7 +1029,7 @@ export default function AccountantDashboard() {
             <div className="card mb-6">
               <button type="button" onClick={() => setDetailsOpen(!detailsOpen)} className="flex items-center justify-between w-full">
                 <div className="flex items-center space-x-3">
-                  <Building2 className="w-5 h-5 text-primary-600" />
+                  <Building2 className="w-5 h-5 text-sf-taupe" />
                   <h3 className="text-lg font-bold text-gray-900">Bedrijfsgegevens</h3>
                 </div>
                 {detailsOpen ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
@@ -1096,10 +1098,10 @@ export default function AccountantDashboard() {
             <div className="card mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  <ClipboardList className="w-5 h-5 text-primary-600" />
+                  <ClipboardList className="w-5 h-5 text-sf-taupe" />
                   <h3 className="text-lg font-bold text-gray-900">Documenten voor klant</h3>
                 </div>
-                <button onClick={() => setShowNewCategory(!showNewCategory)} className="text-sm text-primary-600 hover:text-primary-700 flex items-center space-x-1">
+                <button onClick={() => setShowNewCategory(!showNewCategory)} className="text-sm text-sf-taupe hover:text-sf-brown flex items-center space-x-1">
                   <Plus className="w-4 h-4" />
                   <span>Nieuwe categorie</span>
                 </button>
@@ -1107,10 +1109,10 @@ export default function AccountantDashboard() {
 
               {/* Set toepassen */}
               {docSets.length > 0 && (
-                <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-4">
+                <div className="bg-sf-beige border border-sf-sand rounded-lg p-4 mb-4">
                   <div className="flex items-center space-x-2 mb-2">
-                    <Copy className="w-4 h-4 text-primary-600" />
-                    <span className="text-sm font-medium text-primary-900">Set toepassen op deze klant</span>
+                    <Copy className="w-4 h-4 text-sf-taupe" />
+                    <span className="text-sm font-medium text-sf-brown">Set toepassen op deze klant</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <select id="setSelect" className="input flex-1 text-sm" defaultValue="">
@@ -1165,14 +1167,14 @@ export default function AccountantDashboard() {
                     const isAssigned = assignments.some(a => a.category_id === cat.id);
                     const catChecklist = checklistItems.filter(ci => ci.category_id === cat.id);
                     return (
-                      <div key={cat.id} className={`border rounded-lg p-3 transition-colors ${isAssigned ? 'border-primary-300 bg-primary-50' : 'border-gray-200'}`}>
+                      <div key={cat.id} className={`border rounded-lg p-3 transition-colors ${isAssigned ? 'border-sf-taupe bg-sf-beige' : 'border-gray-200'}`}>
                         <div className="flex items-center justify-between">
                           <label className="flex items-center space-x-3 cursor-pointer flex-1">
                             <input
                               type="checkbox"
                               checked={isAssigned}
                               onChange={() => toggleAssignment(cat.id)}
-                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                              className="w-4 h-4 text-sf-taupe border-gray-300 rounded focus:ring-sf-taupe"
                             />
                             <div>
                               <span className="font-medium text-gray-900">{cat.name}</span>
@@ -1188,7 +1190,7 @@ export default function AccountantDashboard() {
                                 type="date"
                                 value={assignDeadlines[cat.id] || ''}
                                 onChange={e => updateDeadline(cat.id, e.target.value)}
-                                className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-primary-500 focus:border-primary-500"
+                                className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-sf-taupe focus:border-sf-taupe"
                               />
                               <button onClick={() => toggleAssignment(cat.id)} className="p-1 text-red-400 hover:text-red-600" title="Verwijderen">
                                 <Trash2 className="w-4 h-4" />
@@ -1298,7 +1300,7 @@ export default function AccountantDashboard() {
             {/* Berichten */}
             <div className="card">
               <div className="flex items-center space-x-3 mb-4">
-                <MessageSquare className="w-5 h-5 text-primary-600" />
+                <MessageSquare className="w-5 h-5 text-sf-taupe" />
                 <h3 className="text-lg font-bold text-gray-900">Berichten</h3>
               </div>
 

@@ -47,31 +47,33 @@ export default function ClientDashboard() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sf-taupe"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
+    <div className="min-h-screen bg-sf-cream">
+      <header className="bg-sf-taupe shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="w-10 h-10 bg-primary-600 rounded-full flex items-center justify-center">
-                <span className="text-white font-bold">SF</span>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Secure Finance Portal</h1>
-                <p className="text-sm text-gray-600">{client?.company_name || user?.email}</p>
+              <img 
+                src="/logo.png" 
+                alt="Secure Finance" 
+                className="h-10 w-auto brightness-0 invert"
+              />
+              <div className="hidden sm:block border-l border-white/30 pl-4">
+                <p className="text-sm text-white/80">Klantportaal</p>
+                <p className="text-white font-medium">{client?.company_name || user?.email}</p>
               </div>
             </div>
             <button
               onClick={() => signOut()}
-              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
+              className="flex items-center space-x-2 text-white/80 hover:text-white transition-colors"
             >
               <LogOut className="w-5 h-5" />
-              <span>Uitloggen</span>
+              <span className="hidden sm:inline">Uitloggen</span>
             </button>
           </div>
         </div>
@@ -79,21 +81,21 @@ export default function ClientDashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {client && (
-          <div className="card mb-8">
+          <div className="bg-gradient-to-r from-sf-taupe to-sf-sand rounded-xl shadow-lg p-6 mb-8 text-white">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                <h2 className="text-2xl font-bold mb-2">
                   Welkom, {client.contact_person}
                 </h2>
-                <p className="text-gray-600">
+                <p className="text-white/80">
                   Hier vind je een overzicht van alle documenten die je moet aanleveren.
                 </p>
               </div>
-              <div className="text-center">
-                <div className="text-4xl font-bold text-primary-600">
+              <div className="text-center bg-white/20 backdrop-blur rounded-xl px-6 py-4">
+                <div className="text-4xl font-bold text-white">
                   {client.completeness_score}%
                 </div>
-                <p className="text-sm text-gray-600 mt-1">Volledigheid</p>
+                <p className="text-sm text-white/80 mt-1">Volledigheid</p>
               </div>
             </div>
           </div>
@@ -153,7 +155,7 @@ export default function ClientDashboard() {
               {categories.map((category) => (
                 <div
                   key={category.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-primary-300 transition-colors cursor-pointer"
+                  className="border border-gray-200 rounded-lg p-4 hover:border-sf-sand transition-colors cursor-pointer"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
