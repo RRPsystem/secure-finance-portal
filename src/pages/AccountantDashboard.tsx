@@ -38,7 +38,8 @@ export default function AccountantDashboard() {
   const [message, setMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
   const [messages, setMessages] = useState<Array<{id: string; subject: string; description: string; status: string; created_at: string}>>([]);
-  const [docRequests, setDocRequests] = useState<Array<{id: string; title: string; description?: string; deadline?: string; status: string; sent_at?: string; created_at: string}>>([]);
+  const [docRequests, setDocRequests] = useState<Array<{id: string; title: string; description?: string; deadline?: string; status: string; sent_at?: string; created_at: string; request_type?: string; response?: string}>>([]);
+  const [newReqType, setNewReqType] = useState<'upload' | 'yes_no'>('upload');
   const [newReqTitle, setNewReqTitle] = useState('');
   const [newReqDesc, setNewReqDesc] = useState('');
   const [newReqDeadline, setNewReqDeadline] = useState('');
@@ -354,11 +355,13 @@ export default function AccountantDashboard() {
       deadline: newReqDeadline || null,
       status: 'pending',
       created_by: user?.id,
+      request_type: newReqType,
     });
     if (error) { alert('Fout: ' + error.message); return; }
     setNewReqTitle('');
     setNewReqDesc('');
     setNewReqDeadline('');
+    setNewReqType('upload');
     await loadDocRequests(selectedClient.id);
   }
 
@@ -1274,13 +1277,19 @@ export default function AccountantDashboard() {
 
               {/* Extra documenten toevoegen */}
               <div className="border-t border-gray-200 pt-4 mb-4">
-                <p className="text-sm text-gray-500 mb-2">Stap 2: Voeg eventueel extra specifieke documenten toe.</p>
+                <p className="text-sm text-gray-500 mb-2">Stap 2: Voeg eventueel extra specifieke documenten of vragen toe.</p>
                 <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                    <div className="md:col-span-4">
-                      <input type="text" placeholder="Document (bijv. Jaaropgave bank 2024)" className="input text-sm" value={newReqTitle} onChange={e => setNewReqTitle(e.target.value)} />
+                    <div className="md:col-span-2">
+                      <select className="input text-sm" value={newReqType} onChange={e => setNewReqType(e.target.value as 'upload' | 'yes_no')}>
+                        <option value="upload">📄 Document</option>
+                        <option value="yes_no">❓ Ja/Nee vraag</option>
+                      </select>
                     </div>
-                    <div className="md:col-span-4">
+                    <div className="md:col-span-3">
+                      <input type="text" placeholder={newReqType === 'upload' ? "Document (bijv. Jaaropgave bank 2024)" : "Vraag (bijv. Wilt u uitstel aanvragen?)"} className="input text-sm" value={newReqTitle} onChange={e => setNewReqTitle(e.target.value)} />
+                    </div>
+                    <div className="md:col-span-3">
                       <input type="text" placeholder="Toelichting (optioneel)" className="input text-sm" value={newReqDesc} onChange={e => setNewReqDesc(e.target.value)} />
                     </div>
                     <div className="md:col-span-2">
@@ -1299,12 +1308,14 @@ export default function AccountantDashboard() {
               {docRequests.length > 0 && (
                 <div className="space-y-2 mb-4">
                   {docRequests.map(req => {
-                    const statusColors: Record<string, string> = { pending: 'bg-yellow-100 text-yellow-800', sent: 'bg-blue-100 text-blue-800', received: 'bg-green-100 text-green-800', approved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800' };
-                    const statusLabels: Record<string, string> = { pending: 'Nog niet verstuurd', sent: 'Verstuurd', received: 'Ontvangen', approved: 'Goedgekeurd', rejected: 'Afgekeurd' };
+                    const statusColors: Record<string, string> = { pending: 'bg-yellow-100 text-yellow-800', sent: 'bg-blue-100 text-blue-800', completed: 'bg-green-100 text-green-800', approved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800' };
+                    const statusLabels: Record<string, string> = { pending: 'Nog niet verstuurd', sent: 'Verstuurd', completed: 'Afgerond', approved: 'Goedgekeurd', rejected: 'Afgekeurd' };
+                    const isYesNo = req.request_type === 'yes_no';
                     return (
-                      <div key={req.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                      <div key={req.id} className={`flex items-center justify-between p-3 border rounded-lg ${req.response ? 'bg-green-50 border-green-200' : 'border-gray-200'}`}>
                         <div className="flex-1">
                           <div className="flex items-center space-x-2">
+                            <span className="text-sm">{isYesNo ? '❓' : '📄'}</span>
                             <span className="font-medium text-gray-900 text-sm">{req.title}</span>
                             <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[req.status] || 'bg-gray-100 text-gray-600'}`}>
                               {statusLabels[req.status] || req.status}
@@ -1320,6 +1331,12 @@ export default function AccountantDashboard() {
                             )}
                             {req.sent_at && <span>Verstuurd: {new Date(req.sent_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>}
                           </div>
+                          {req.response && (
+                            <div className="mt-2 p-2 bg-white border border-green-300 rounded text-sm">
+                              <span className="font-medium text-green-700">Antwoord klant: </span>
+                              <span className="text-gray-700">{req.response}</span>
+                            </div>
+                          )}
                         </div>
                         <button onClick={() => deleteDocRequest(req.id)} className="p-1 text-red-400 hover:text-red-600 ml-2" title="Verwijderen">
                           <Trash2 className="w-4 h-4" />

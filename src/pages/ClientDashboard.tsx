@@ -12,6 +12,8 @@ interface DocumentRequest {
   deadline: string | null;
   status: string;
   created_at: string;
+  request_type?: string;
+  response?: string;
 }
 
 function getDaysUntilDeadline(deadline: string | null): number | null {
@@ -99,10 +101,9 @@ export default function ClientDashboard() {
     .filter(r => r.deadline)
     .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())[0];
 
-  // Check if request is an "uitstel" type (based on title containing "uitstel" or "uitsle")
-  function isUitstelRequest(request: DocumentRequest): boolean {
-    const title = request.title.toLowerCase();
-    return title.includes('uitstel') || title.includes('uitsle');
+  // Check if request is a yes/no question type
+  function isYesNoRequest(request: DocumentRequest): boolean {
+    return request.request_type === 'yes_no';
   }
 
   // Handle uitstel response (ja/nee)
@@ -391,7 +392,7 @@ export default function ClientDashboard() {
                       </div>
                       
                       <div className="flex items-center gap-2">
-                        {isUitstelRequest(request) ? (
+                        {isYesNoRequest(request) ? (
                           <>
                             <button 
                               onClick={() => openUitstelModal(request)}
@@ -438,15 +439,23 @@ export default function ClientDashboard() {
               {completedRequests.map((request) => (
                 <div
                   key={request.id}
-                  className="flex items-center justify-between p-4 bg-green-50 rounded-lg"
+                  className="p-4 bg-green-50 rounded-lg"
                 >
-                  <div className="flex items-center gap-3">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-medium text-gray-900">{request.title}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                      <span className="font-medium text-gray-900">{request.title}</span>
+                    </div>
+                    <span className="text-sm text-gray-500">
+                      {formatDeadline(request.deadline)}
+                    </span>
                   </div>
-                  <span className="text-sm text-gray-500">
-                    {formatDeadline(request.deadline)}
-                  </span>
+                  {request.response && (
+                    <div className="mt-2 ml-8 p-2 bg-white border border-green-200 rounded text-sm">
+                      <span className="font-medium text-green-700">Jouw antwoord: </span>
+                      <span className="text-gray-700">{request.response}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
