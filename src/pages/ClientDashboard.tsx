@@ -106,25 +106,32 @@ export default function ClientDashboard() {
     return request.request_type === 'yes_no';
   }
 
-  // Handle uitstel response (ja/nee)
-  async function handleUitstelResponse(request: DocumentRequest, response: 'ja' | 'nee') {
+  // Handle yes/no response
+  async function handleYesNoResponse(request: DocumentRequest, response: 'ja' | 'nee') {
     setUitstelSubmitting(true);
     try {
       // Update the request status and add response
-      await supabase
+      const { error } = await supabase
         .from('document_requests')
         .update({ 
           status: 'completed',
-          response: response === 'ja' ? 'Klant wil uitstel aanvragen' : 'Klant heeft geen uitstel nodig'
+          response: response === 'ja' ? 'Ja' : 'Nee'
         })
         .eq('id', request.id);
+      
+      if (error) {
+        console.error('Error updating request:', error);
+        alert('Fout bij opslaan: ' + error.message);
+        return;
+      }
       
       // Reload data
       await loadClientData();
       setUitstelModalOpen(false);
       setUitstelRequest(null);
-    } catch (error) {
-      console.error('Error submitting uitstel response:', error);
+    } catch (error: any) {
+      console.error('Error submitting response:', error);
+      alert('Er is iets misgegaan: ' + error.message);
     } finally {
       setUitstelSubmitting(false);
     }
@@ -402,7 +409,7 @@ export default function ClientDashboard() {
                               <span>Ja, aanvragen</span>
                             </button>
                             <button 
-                              onClick={() => handleUitstelResponse(request, 'nee')}
+                              onClick={() => handleYesNoResponse(request, 'nee')}
                               className="flex items-center gap-2 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
                             >
                               <X className="w-4 h-4" />
@@ -572,7 +579,7 @@ export default function ClientDashboard() {
 
             <div className="flex gap-3">
               <button
-                onClick={() => handleUitstelResponse(uitstelRequest, 'ja')}
+                onClick={() => handleYesNoResponse(uitstelRequest, 'ja')}
                 disabled={uitstelSubmitting}
                 className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg transition-colors disabled:opacity-50"
               >
