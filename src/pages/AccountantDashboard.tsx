@@ -56,6 +56,7 @@ export default function AccountantDashboard() {
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState<{email: string; password: string; url: string} | null>(null);
   const [clientDocuments, setClientDocuments] = useState<Array<{id: string; file_name: string; file_path: string; file_size: number; file_type: string; uploaded_at: string; status: string; request_id: string}>>([]);
+  const [inboxTab, setInboxTab] = useState<'nieuw' | 'beantwoord' | 'openstaand'>('nieuw');
 
   const emptyForm = { company_name: '', contact_person: '', email: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -683,9 +684,7 @@ export default function AccountantDashboard() {
                 src="/logo.png" 
                 alt="Secure Finance" 
                 className="h-10 w-auto"
-                style={{ filter: 'brightness(0) invert(1)' }}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
+              />  
               <div className="hidden sm:block border-l border-white/30 pl-4">
                 <p className="text-sm text-white/80">Boekhouder Dashboard</p>
                 <p className="text-white font-medium">{user?.email}</p>
@@ -1134,31 +1133,59 @@ export default function AccountantDashboard() {
               )}
             </div>
 
-            {/* INBOX - Ontvangen documenten en antwoorden */}
-            {(clientDocuments.length > 0 || docRequests.some(r => r.response)) && (
-              <div className="card mb-6 border-2 border-green-200 bg-green-50/30">
-                <div className="flex items-center space-x-3 mb-4">
-                  <div className="p-2 bg-green-100 rounded-lg">
-                    <Bell className="w-5 h-5 text-green-600" />
+            {/* INBOX met tabbladen */}
+            <div className="card mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-sf-beige rounded-lg">
+                    <Bell className="w-5 h-5 text-sf-brown" />
                   </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">Inbox</h3>
-                    <p className="text-sm text-gray-500">Ontvangen documenten en antwoorden van klant</p>
-                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Communicatie</h3>
                 </div>
+              </div>
 
-                {/* Ontvangen documenten */}
-                {clientDocuments.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
-                      <File className="w-4 h-4 text-green-600" />
-                      Documenten ({clientDocuments.length})
-                    </h4>
+              {/* Tabbladen */}
+              <div className="flex border-b border-gray-200 mb-4">
+                <button
+                  onClick={() => setInboxTab('nieuw')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${inboxTab === 'nieuw' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  Nieuw
+                  {clientDocuments.length > 0 && (
+                    <span className="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs">{clientDocuments.length}</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setInboxTab('beantwoord')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${inboxTab === 'beantwoord' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  Beantwoord
+                  {docRequests.filter(r => r.response).length > 0 && (
+                    <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">{docRequests.filter(r => r.response).length}</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setInboxTab('openstaand')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${inboxTab === 'openstaand' ? 'border-yellow-500 text-yellow-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  Openstaand
+                  {docRequests.filter(r => r.status === 'sent' && !r.response).length > 0 && (
+                    <span className="ml-2 bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-xs">{docRequests.filter(r => r.status === 'sent' && !r.response).length}</span>
+                  )}
+                </button>
+              </div>
+
+              {/* Tab content: Nieuw */}
+              {inboxTab === 'nieuw' && (
+                <div>
+                  {clientDocuments.length === 0 ? (
+                    <p className="text-gray-500 text-center py-6">Geen nieuwe documenten ontvangen</p>
+                  ) : (
                     <div className="space-y-2">
                       {clientDocuments.map(doc => {
                         const relatedRequest = docRequests.find(r => r.id === doc.request_id);
                         return (
-                          <div key={doc.id} className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-lg">
+                          <div key={doc.id} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                             <div className="flex items-center space-x-3">
                               <FileText className="w-5 h-5 text-green-600" />
                               <div>
@@ -1190,32 +1217,80 @@ export default function AccountantDashboard() {
                         );
                       })}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+              )}
 
-                {/* Antwoorden op vragen */}
-                {docRequests.filter(r => r.response).length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-blue-600" />
-                      Antwoorden ({docRequests.filter(r => r.response).length})
-                    </h4>
+              {/* Tab content: Beantwoord */}
+              {inboxTab === 'beantwoord' && (
+                <div>
+                  {docRequests.filter(r => r.response).length === 0 ? (
+                    <p className="text-gray-500 text-center py-6">Geen beantwoorde vragen</p>
+                  ) : (
                     <div className="space-y-2">
                       {docRequests.filter(r => r.response).map(req => (
-                        <div key={req.id} className="p-3 bg-white border border-blue-200 rounded-lg">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-gray-900 text-sm">{req.title}</span>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${req.response === 'Ja' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                        <div key={req.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div>
+                            <p className="font-medium text-gray-900 text-sm">{req.title}</p>
+                            {req.description && <p className="text-xs text-gray-500">{req.description}</p>}
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className={`px-3 py-1 rounded text-sm font-medium ${req.response === 'Ja' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
                               {req.response}
                             </span>
+                            <button 
+                              onClick={() => deleteDocRequest(req.id)}
+                              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                              title="Verwijderen"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
+
+              {/* Tab content: Openstaand */}
+              {inboxTab === 'openstaand' && (
+                <div>
+                  {docRequests.filter(r => r.status === 'sent' && !r.response).length === 0 ? (
+                    <p className="text-gray-500 text-center py-6">Geen openstaande verzoeken</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {docRequests.filter(r => r.status === 'sent' && !r.response).map(req => (
+                        <div key={req.id} className="flex items-center justify-between p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm">{req.request_type === 'yes_no' ? '❓' : '📄'}</span>
+                              <p className="font-medium text-gray-900 text-sm">{req.title}</p>
+                            </div>
+                            <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+                              {req.deadline && (
+                                <span className="flex items-center space-x-1">
+                                  <CalendarDays className="w-3 h-3" />
+                                  <span>{new Date(req.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>
+                                </span>
+                              )}
+                              <span>Wacht op klant</span>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => deleteDocRequest(req.id)}
+                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Verwijderen"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Documenten voor klant - geïntegreerde sectie */}
             <div className="card mb-6">
