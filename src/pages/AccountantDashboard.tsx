@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy, UserPlus, Download, File } from 'lucide-react';
+import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy, UserPlus, Download, File, Bell } from 'lucide-react';
 import type { Client, DocumentCategory, ClientDocumentAssignment, DocumentChecklist, DocumentSet, DocumentSetItem } from '../types/database.types';
 
 type View = 'list' | 'new' | 'detail' | 'sets';
@@ -790,7 +790,6 @@ export default function AccountantDashboard() {
                         <th className="text-left py-3 px-4 font-medium text-gray-700">Bedrijf</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-700">Contactpersoon</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-700">Type</th>
-                        <th className="text-left py-3 px-4 font-medium text-gray-700">Volledigheid</th>
                         <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
                         <th className="text-right py-3 px-4 font-medium text-gray-700">Acties</th>
                       </tr>
@@ -807,25 +806,6 @@ export default function AccountantDashboard() {
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-sf-beige text-sf-brown">
                               {client.subscription_type === 'abonnement' ? 'Abonnement' : 'Per opdracht'}
                             </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <div className="flex items-center space-x-2">
-                              <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[100px]">
-                                <div
-                                  className={`h-2 rounded-full ${
-                                    client.completeness_score >= 80
-                                      ? 'bg-green-500'
-                                      : client.completeness_score >= 50
-                                      ? 'bg-yellow-500'
-                                      : 'bg-red-500'
-                                  }`}
-                                  style={{ width: `${client.completeness_score}%` }}
-                                />
-                              </div>
-                              <span className="text-sm font-medium text-gray-700">
-                                {client.completeness_score}%
-                              </span>
-                            </div>
                           </td>
                           <td className="py-3 px-4">
                             {(() => {
@@ -1154,12 +1134,95 @@ export default function AccountantDashboard() {
               )}
             </div>
 
+            {/* INBOX - Ontvangen documenten en antwoorden */}
+            {(clientDocuments.length > 0 || docRequests.some(r => r.response)) && (
+              <div className="card mb-6 border-2 border-green-200 bg-green-50/30">
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <Bell className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Inbox</h3>
+                    <p className="text-sm text-gray-500">Ontvangen documenten en antwoorden van klant</p>
+                  </div>
+                </div>
+
+                {/* Ontvangen documenten */}
+                {clientDocuments.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <File className="w-4 h-4 text-green-600" />
+                      Documenten ({clientDocuments.length})
+                    </h4>
+                    <div className="space-y-2">
+                      {clientDocuments.map(doc => {
+                        const relatedRequest = docRequests.find(r => r.id === doc.request_id);
+                        return (
+                          <div key={doc.id} className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <FileText className="w-5 h-5 text-green-600" />
+                              <div>
+                                <p className="font-medium text-gray-900 text-sm">{doc.file_name}</p>
+                                <div className="flex items-center space-x-2 text-xs text-gray-500">
+                                  {relatedRequest && <span>Voor: {relatedRequest.title}</span>}
+                                  <span>•</span>
+                                  <span>{new Date(doc.uploaded_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <button 
+                                onClick={() => downloadDocument(doc.file_path, doc.file_name)}
+                                className="flex items-center space-x-1 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm"
+                              >
+                                <Download className="w-4 h-4" />
+                                <span>Download</span>
+                              </button>
+                              <button 
+                                onClick={() => deleteDocument(doc.id, doc.file_path)}
+                                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                title="Verwijderen"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Antwoorden op vragen */}
+                {docRequests.filter(r => r.response).length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-gray-700 mb-2 flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-blue-600" />
+                      Antwoorden ({docRequests.filter(r => r.response).length})
+                    </h4>
+                    <div className="space-y-2">
+                      {docRequests.filter(r => r.response).map(req => (
+                        <div key={req.id} className="p-3 bg-white border border-blue-200 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-gray-900 text-sm">{req.title}</span>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${req.response === 'Ja' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+                              {req.response}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Documenten voor klant - geïntegreerde sectie */}
             <div className="card mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <ClipboardList className="w-5 h-5 text-sf-taupe" />
-                  <h3 className="text-lg font-bold text-gray-900">Documenten voor klant</h3>
+                  <h3 className="text-lg font-bold text-gray-900">Documenten aanvragen</h3>
                 </div>
                 <button onClick={() => setShowNewCategory(!showNewCategory)} className="text-sm text-sf-taupe hover:text-sf-brown flex items-center space-x-1">
                   <Plus className="w-4 h-4" />
@@ -1344,55 +1407,6 @@ export default function AccountantDashboard() {
                       </div>
                     );
                   })}
-                </div>
-              )}
-
-              {/* Geüploade documenten van klant */}
-              {clientDocuments.length > 0 && (
-                <div className="border-t border-gray-200 pt-4 mb-4">
-                  <div className="flex items-center space-x-2 mb-3">
-                    <File className="w-4 h-4 text-green-600" />
-                    <h4 className="font-medium text-gray-900">Ontvangen documenten ({clientDocuments.length})</h4>
-                  </div>
-                  <div className="space-y-2">
-                    {clientDocuments.map(doc => {
-                      const relatedRequest = docRequests.find(r => r.id === doc.request_id);
-                      return (
-                        <div key={doc.id} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <FileText className="w-5 h-5 text-green-600" />
-                            <div>
-                              <p className="font-medium text-gray-900 text-sm">{doc.file_name}</p>
-                              <div className="flex items-center space-x-2 text-xs text-gray-500">
-                                {relatedRequest && <span>Voor: {relatedRequest.title}</span>}
-                                <span>•</span>
-                                <span>{new Date(doc.uploaded_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                                <span>•</span>
-                                <span>{(doc.file_size / 1024).toFixed(0)} KB</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <button 
-                              onClick={() => downloadDocument(doc.file_path, doc.file_name)}
-                              className="flex items-center space-x-1 text-sf-taupe hover:text-sf-brown px-2 py-1 rounded"
-                              title="Downloaden"
-                            >
-                              <Download className="w-4 h-4" />
-                              <span className="text-sm">Download</span>
-                            </button>
-                            <button 
-                              onClick={() => deleteDocument(doc.id, doc.file_path)}
-                              className="p-1 text-red-400 hover:text-red-600"
-                              title="Verwijderen"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
               )}
 
