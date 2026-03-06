@@ -56,7 +56,7 @@ export default function AccountantDashboard() {
   const [inviting, setInviting] = useState(false);
   const [inviteResult, setInviteResult] = useState<{email: string; password: string; url: string} | null>(null);
   const [clientDocuments, setClientDocuments] = useState<Array<{id: string; file_name: string; file_path: string; file_size: number; file_type: string; uploaded_at: string; status: string; request_id: string}>>([]);
-  const [inboxTab, setInboxTab] = useState<'nieuw' | 'beantwoord' | 'openstaand'>('nieuw');
+  const [inboxTab, setInboxTab] = useState<'nieuw' | 'gelezen' | 'openstaand'>('nieuw');
 
   const emptyForm = { company_name: '', contact_person: '', email: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -115,7 +115,7 @@ export default function AccountantDashboard() {
     if (data) setClientDocuments(data);
   }
 
-  async function downloadDocument(filePath: string, fileName: string) {
+  async function downloadDocument(docId: string, filePath: string, fileName: string) {
     const { data, error } = await supabase.storage
       .from('client-documents')
       .download(filePath);
@@ -123,6 +123,17 @@ export default function AccountantDashboard() {
     if (error) {
       alert('Fout bij downloaden: ' + error.message);
       return;
+    }
+    
+    // Mark as read in database
+    await supabase
+      .from('client_documents')
+      .update({ status: 'approved' })
+      .eq('id', docId);
+    
+    // Reload documents to move to "Gelezen" tab
+    if (selectedClient) {
+      await loadClientDocuments(selectedClient.id);
     }
     
     // Create download link
@@ -1151,17 +1162,17 @@ export default function AccountantDashboard() {
                   className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${inboxTab === 'nieuw' ? 'border-green-500 text-green-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
                   Nieuw
-                  {clientDocuments.length > 0 && (
-                    <span className="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs">{clientDocuments.length}</span>
+                  {clientDocuments.filter(d => d.status === 'pending').length > 0 && (
+                    <span className="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded-full text-xs">{clientDocuments.filter(d => d.status === 'pending').length}</span>
                   )}
                 </button>
                 <button
-                  onClick={() => setInboxTab('beantwoord')}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${inboxTab === 'beantwoord' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => setInboxTab('gelezen')}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${inboxTab === 'gelezen' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
-                  Beantwoord
-                  {docRequests.filter(r => r.response).length > 0 && (
-                    <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">{docRequests.filter(r => r.response).length}</span>
+                  Gelezen
+                  {(clientDocuments.filter(d => d.status === 'approved').length + docRequests.filter(r => r.response).length) > 0 && (
+                    <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">{clientDocuments.filter(d => d.status === 'approved').length + docRequests.filter(r => r.response).length}</span>
                   )}
                 </button>
                 <button
@@ -1178,11 +1189,11 @@ export default function AccountantDashboard() {
               {/* Tab content: Nieuw */}
               {inboxTab === 'nieuw' && (
                 <div>
-                  {clientDocuments.length === 0 ? (
+                  {clientDocuments.filter(d => d.status === 'pending').length === 0 ? (
                     <p className="text-gray-500 text-center py-6">Geen nieuwe documenten ontvangen</p>
                   ) : (
                     <div className="space-y-2">
-                      {clientDocuments.map(doc => {
+                      {clientDocuments.filter(d => d.status === 'pending').map(doc => {
                         const relatedRequest = docRequests.find(r => r.id === doc.request_id);
                         return (
                           <div key={doc.id} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -1199,7 +1210,7 @@ export default function AccountantDashboard() {
                             </div>
                             <div className="flex items-center space-x-2">
                               <button 
-                                onClick={() => downloadDocument(doc.file_path, doc.file_name)}
+                                onClick={() => downloadDocument(doc.id, doc.file_path, doc.file_name)}
                                 className="flex items-center space-x-1 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded text-sm"
                               >
                                 <Download className="w-4 h-4" />
@@ -1221,13 +1232,43 @@ export default function AccountantDashboard() {
                 </div>
               )}
 
-              {/* Tab content: Beantwoord */}
-              {inboxTab === 'beantwoord' && (
+              {/* Tab content: Gelezen */}
+              {inboxTab === 'gelezen' && (
                 <div>
-                  {docRequests.filter(r => r.response).length === 0 ? (
-                    <p className="text-gray-500 text-center py-6">Geen beantwoorde vragen</p>
+                  {(clientDocuments.filter(d => d.status === 'approved').length + docRequests.filter(r => r.response).length) === 0 ? (
+                    <p className="text-gray-500 text-center py-6">Geen gelezen items</p>
                   ) : (
                     <div className="space-y-2">
+                      {/* Gelezen documenten */}
+                      {clientDocuments.filter(d => d.status === 'approved').map(doc => {
+                        const relatedRequest = docRequests.find(r => r.id === doc.request_id);
+                        return (
+                          <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <FileText className="w-5 h-5 text-gray-500" />
+                              <div>
+                                <p className="font-medium text-gray-900 text-sm">{doc.file_name}</p>
+                                <div className="flex items-center space-x-2 text-xs text-gray-500">
+                                  {relatedRequest && <span>Voor: {relatedRequest.title}</span>}
+                                  <span>•</span>
+                                  <span>{new Date(doc.uploaded_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-gray-500">Gedownload</span>
+                              <button 
+                                onClick={() => deleteDocument(doc.id, doc.file_path)}
+                                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                title="Verwijderen"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {/* Beantwoorde vragen */}
                       {docRequests.filter(r => r.response).map(req => (
                         <div key={req.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
                           <div>
