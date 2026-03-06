@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Upload, CheckCircle, AlertCircle, Clock, FileText, Calendar, ChevronRight, Bell } from 'lucide-react';
+import { LogOut, Upload, CheckCircle, AlertCircle, Clock, FileText, Calendar, ChevronRight, Bell, X, Check, CalendarClock, Loader2, Shield } from 'lucide-react';
 import type { Client } from '../types/database.types';
 
 interface DocumentRequest {
@@ -42,6 +42,18 @@ export default function ClientDashboard() {
   const [client, setClient] = useState<Client | null>(null);
   const [documentRequests, setDocumentRequests] = useState<DocumentRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Upload modal state
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<DocumentRequest | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  
+  // Uitstel modal state
+  const [uitstelModalOpen, setUitstelModalOpen] = useState(false);
+  const [uitstelRequest, setUitstelRequest] = useState<DocumentRequest | null>(null);
+  const [uitstelSubmitting, setUitstelSubmitting] = useState(false);
 
   useEffect(() => {
     loadClientData();
@@ -86,6 +98,106 @@ export default function ClientDashboard() {
   const nearestDeadline = pendingRequests
     .filter(r => r.deadline)
     .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())[0];
+
+  // Check if request is an "uitstel" type (based on title containing "uitstel")
+  function isUitstelRequest(request: DocumentRequest): boolean {
+    return request.title.toLowerCase().includes('uitstel');
+  }
+
+  // Handle uitstel response (ja/nee)
+  async function handleUitstelResponse(request: DocumentRequest, response: 'ja' | 'nee') {
+    setUitstelSubmitting(true);
+    try {
+      // Update the request status and add response
+      await supabase
+        .from('document_requests')
+        .update({ 
+          status: 'completed',
+          response: response === 'ja' ? 'Klant wil uitstel aanvragen' : 'Klant heeft geen uitstel nodig'
+        })
+        .eq('id', request.id);
+      
+      // Reload data
+      await loadClientData();
+      setUitstelModalOpen(false);
+      setUitstelRequest(null);
+    } catch (error) {
+      console.error('Error submitting uitstel response:', error);
+    } finally {
+      setUitstelSubmitting(false);
+    }
+  }
+
+  // Handle file upload
+  async function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    if (!event.target.files || !event.target.files[0] || !selectedRequest || !client) return;
+    
+    const file = event.target.files[0];
+    setUploadingFile(true);
+    setUploadError(null);
+    
+    try {
+      // Create secure file path: client_id/request_id/filename
+      const filePath = `${client.id}/${selectedRequest.id}/${Date.now()}_${file.name}`;
+      
+      // Upload to Supabase Storage (secure bucket with RLS)
+      const { error: uploadError } = await supabase.storage
+        .from('client-documents')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (uploadError) throw uploadError;
+      
+      // Create document record in database
+      await supabase
+        .from('client_documents')
+        .insert({
+          client_id: client.id,
+          request_id: selectedRequest.id,
+          file_name: file.name,
+          file_path: filePath,
+          file_size: file.size,
+          file_type: file.type,
+          uploaded_by: user?.id
+        });
+      
+      // Update request status
+      await supabase
+        .from('document_requests')
+        .update({ status: 'completed' })
+        .eq('id', selectedRequest.id);
+      
+      setUploadSuccess(true);
+      
+      // Reload data after short delay
+      setTimeout(async () => {
+        await loadClientData();
+        setUploadModalOpen(false);
+        setSelectedRequest(null);
+        setUploadSuccess(false);
+      }, 1500);
+      
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      setUploadError(error.message || 'Er is iets misgegaan bij het uploaden.');
+    } finally {
+      setUploadingFile(false);
+    }
+  }
+
+  function openUploadModal(request: DocumentRequest) {
+    setSelectedRequest(request);
+    setUploadModalOpen(true);
+    setUploadError(null);
+    setUploadSuccess(false);
+  }
+
+  function openUitstelModal(request: DocumentRequest) {
+    setUitstelRequest(request);
+    setUitstelModalOpen(true);
+  }
 
   if (loading) {
     return (
@@ -265,10 +377,32 @@ export default function ClientDashboard() {
                       </div>
                       
                       <div className="flex items-center gap-2">
-                        <button className="flex items-center gap-2 bg-sf-taupe hover:bg-sf-brown text-white px-4 py-2 rounded-lg transition-colors">
-                          <Upload className="w-4 h-4" />
-                          <span>Uploaden</span>
-                        </button>
+                        {isUitstelRequest(request) ? (
+                          <>
+                            <button 
+                              onClick={() => openUitstelModal(request)}
+                              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+                            >
+                              <Check className="w-4 h-4" />
+                              <span>Ja, aanvragen</span>
+                            </button>
+                            <button 
+                              onClick={() => handleUitstelResponse(request, 'nee')}
+                              className="flex items-center gap-2 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                              <span>Nee</span>
+                            </button>
+                          </>
+                        ) : (
+                          <button 
+                            onClick={() => openUploadModal(request)}
+                            className="flex items-center gap-2 bg-sf-taupe hover:bg-sf-brown text-white px-4 py-2 rounded-lg transition-colors"
+                          >
+                            <Upload className="w-4 h-4" />
+                            <span>Uploaden</span>
+                          </button>
+                        )}
                         <button className="flex items-center gap-2 border border-gray-300 hover:border-sf-taupe text-gray-700 px-4 py-2 rounded-lg transition-colors">
                           <ChevronRight className="w-4 h-4" />
                           <span>Details</span>
@@ -305,6 +439,139 @@ export default function ClientDashboard() {
           </div>
         )}
       </main>
+
+      {/* Upload Modal */}
+      {uploadModalOpen && selectedRequest && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">Document uploaden</h3>
+              <button 
+                onClick={() => { setUploadModalOpen(false); setSelectedRequest(null); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="mb-6">
+              <div className="flex items-center gap-3 p-4 bg-sf-cream rounded-lg mb-4">
+                <FileText className="w-8 h-8 text-sf-taupe" />
+                <div>
+                  <p className="font-medium text-gray-900">{selectedRequest.title}</p>
+                  {selectedRequest.deadline && (
+                    <p className="text-sm text-gray-500">Deadline: {formatDeadline(selectedRequest.deadline)}</p>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg mb-4">
+                <Shield className="w-5 h-5 text-green-600" />
+                <p className="text-sm text-green-700">
+                  Je documenten worden veilig en versleuteld opgeslagen. Alleen jij en je boekhouder hebben toegang.
+                </p>
+              </div>
+            </div>
+
+            {uploadSuccess ? (
+              <div className="text-center py-8">
+                <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+                <p className="text-lg font-medium text-gray-900">Document geüpload!</p>
+                <p className="text-sm text-gray-500">Je boekhouder ontvangt een melding.</p>
+              </div>
+            ) : (
+              <>
+                {uploadError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-700">{uploadError}</p>
+                  </div>
+                )}
+                
+                <label className="block">
+                  <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-sf-taupe transition-colors cursor-pointer">
+                    {uploadingFile ? (
+                      <div className="flex flex-col items-center">
+                        <Loader2 className="w-10 h-10 text-sf-taupe animate-spin mb-3" />
+                        <p className="text-gray-600">Bezig met uploaden...</p>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                        <p className="text-gray-600 mb-1">Klik om een bestand te selecteren</p>
+                        <p className="text-sm text-gray-400">of sleep het bestand hierheen</p>
+                        <p className="text-xs text-gray-400 mt-2">PDF, JPG, PNG, Excel (max 10MB)</p>
+                      </>
+                    )}
+                  </div>
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    onChange={handleFileUpload}
+                    accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.doc,.docx"
+                    disabled={uploadingFile}
+                  />
+                </label>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Uitstel Confirmation Modal */}
+      {uitstelModalOpen && uitstelRequest && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-gray-900">Uitstel aanvragen</h3>
+              <button 
+                onClick={() => { setUitstelModalOpen(false); setUitstelRequest(null); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="mb-6">
+              <div className="flex items-center gap-3 p-4 bg-sf-cream rounded-lg mb-4">
+                <CalendarClock className="w-8 h-8 text-sf-taupe" />
+                <div>
+                  <p className="font-medium text-gray-900">{uitstelRequest.title}</p>
+                  {uitstelRequest.description && (
+                    <p className="text-sm text-gray-500">{uitstelRequest.description}</p>
+                  )}
+                </div>
+              </div>
+              
+              <p className="text-gray-600">
+                Weet je zeker dat je uitstel wilt aanvragen? Je boekhouder zal dit voor je regelen.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleUitstelResponse(uitstelRequest, 'ja')}
+                disabled={uitstelSubmitting}
+                className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {uitstelSubmitting ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" />
+                    <span>Ja, aanvragen</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => { setUitstelModalOpen(false); setUitstelRequest(null); }}
+                className="flex-1 flex items-center justify-center gap-2 border border-gray-300 text-gray-700 px-4 py-3 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <span>Annuleren</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
