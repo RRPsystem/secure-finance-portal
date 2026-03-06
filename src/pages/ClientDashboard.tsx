@@ -165,7 +165,7 @@ export default function ClientDashboard() {
           file_size: file.size,
           file_type: file.type,
           uploaded_by: user?.id,
-          status: 'uploaded'
+          status: 'pending'
         });
       
       if (dbError) {
