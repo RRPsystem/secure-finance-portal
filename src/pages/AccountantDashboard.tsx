@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
-import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy, UserPlus, Download, File, Bell } from 'lucide-react';
+import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy, UserPlus, Download, Bell } from 'lucide-react';
 import type { Client, DocumentCategory, ClientDocumentAssignment, DocumentChecklist, DocumentSet, DocumentSetItem } from '../types/database.types';
 
 type View = 'list' | 'new' | 'detail' | 'sets';
