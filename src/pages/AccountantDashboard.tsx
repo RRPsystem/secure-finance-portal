@@ -48,6 +48,12 @@ export default function AccountantDashboard() {
   const [docSets, setDocSets] = useState<DocumentSet[]>([]);
   const [docSetItems, setDocSetItems] = useState<DocumentSetItem[]>([]);
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [editingSetNameId, setEditingSetNameId] = useState<string | null>(null);
+  const [editSetName, setEditSetName] = useState('');
+  const [editSetDesc, setEditSetDesc] = useState('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editItemTitle, setEditItemTitle] = useState('');
+  const [editItemDesc, setEditItemDesc] = useState('');
   const [newSetName, setNewSetName] = useState('');
   const [newSetDesc, setNewSetDesc] = useState('');
   const [newItemTitle, setNewItemTitle] = useState('');
@@ -269,6 +275,38 @@ export default function AccountantDashboard() {
   async function deleteSetItem(itemId: string) {
     await supabase.from('document_set_items').delete().eq('id', itemId);
     await loadSets();
+  }
+
+  async function updateSet(setId: string) {
+    if (!editSetName.trim()) return;
+    await supabase.from('document_sets').update({
+      name: editSetName,
+      description: editSetDesc || null,
+    }).eq('id', setId);
+    setEditingSetNameId(null);
+    await loadSets();
+  }
+
+  async function updateSetItem(itemId: string) {
+    if (!editItemTitle.trim()) return;
+    await supabase.from('document_set_items').update({
+      title: editItemTitle,
+      description: editItemDesc || null,
+    }).eq('id', itemId);
+    setEditingItemId(null);
+    await loadSets();
+  }
+
+  function startEditSet(set: DocumentSet) {
+    setEditingSetNameId(set.id);
+    setEditSetName(set.name);
+    setEditSetDesc(set.description || '');
+  }
+
+  function startEditItem(item: DocumentSetItem) {
+    setEditingItemId(item.id);
+    setEditItemTitle(item.title);
+    setEditItemDesc(item.description || '');
   }
 
   async function deleteSet(setId: string) {
@@ -900,20 +938,48 @@ export default function AccountantDashboard() {
                   return (
                     <div key={set.id} className="card">
                       <div className="flex items-center justify-between">
-                        <button onClick={() => setEditingSetId(isOpen ? null : set.id)} className="flex items-center space-x-3 flex-1 text-left">
-                          {isOpen ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <Package className="w-4 h-4 text-sf-taupe" />
-                              <span className="font-bold text-gray-900">{set.name}</span>
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-sf-beige text-sf-brown">{items.length} documenten</span>
-                            </div>
-                            {set.description && <p className="text-sm text-gray-500 mt-0.5 ml-6">{set.description}</p>}
+                        {editingSetNameId === set.id ? (
+                          <div className="flex items-center space-x-2 flex-1">
+                            <input 
+                              type="text" 
+                              className="input text-sm flex-1" 
+                              value={editSetName} 
+                              onChange={e => setEditSetName(e.target.value)} 
+                              placeholder="Set naam"
+                            />
+                            <input 
+                              type="text" 
+                              className="input text-sm flex-1" 
+                              value={editSetDesc} 
+                              onChange={e => setEditSetDesc(e.target.value)} 
+                              placeholder="Beschrijving (optioneel)"
+                            />
+                            <button onClick={() => updateSet(set.id)} className="btn-primary text-sm">Opslaan</button>
+                            <button onClick={() => setEditingSetNameId(null)} className="text-gray-500 hover:text-gray-700 text-sm">Annuleren</button>
                           </div>
-                        </button>
-                        <button onClick={() => deleteSet(set.id)} className="p-1.5 text-red-400 hover:text-red-600" title="Set verwijderen">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        ) : (
+                          <>
+                            <button onClick={() => setEditingSetId(isOpen ? null : set.id)} className="flex items-center space-x-3 flex-1 text-left">
+                              {isOpen ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronRight className="w-5 h-5 text-gray-400" />}
+                              <div>
+                                <div className="flex items-center space-x-2">
+                                  <Package className="w-4 h-4 text-sf-taupe" />
+                                  <span className="font-bold text-gray-900">{set.name}</span>
+                                  <span className="text-xs px-2 py-0.5 rounded-full bg-sf-beige text-sf-brown">{items.length} documenten</span>
+                                </div>
+                                {set.description && <p className="text-sm text-gray-500 mt-0.5 ml-6">{set.description}</p>}
+                              </div>
+                            </button>
+                            <div className="flex items-center space-x-1">
+                              <button onClick={() => startEditSet(set)} className="p-1.5 text-gray-400 hover:text-sf-brown" title="Set bewerken">
+                                <FileText className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => deleteSet(set.id)} className="p-1.5 text-red-400 hover:text-red-600" title="Set verwijderen">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       {isOpen && (
@@ -923,14 +989,38 @@ export default function AccountantDashboard() {
                             <div className="space-y-2 mb-4">
                               {items.map((item, idx) => (
                                 <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                                  <div className="flex items-center space-x-2">
-                                    <span className="text-xs font-medium text-gray-400 w-5">{idx + 1}.</span>
-                                    <span className="text-sm font-medium text-gray-900">{item.title}</span>
-                                    {item.description && <span className="text-xs text-gray-500">— {item.description}</span>}
-                                  </div>
-                                  <button onClick={() => deleteSetItem(item.id)} className="p-1 text-red-400 hover:text-red-600">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
+                                  {editingItemId === item.id ? (
+                                    <div className="flex items-center space-x-2 flex-1">
+                                      <span className="text-xs font-medium text-gray-400 w-5">{idx + 1}.</span>
+                                      <input 
+                                        type="text" 
+                                        className="input text-sm flex-1" 
+                                        value={editItemTitle} 
+                                        onChange={e => setEditItemTitle(e.target.value)} 
+                                        placeholder="Document naam"
+                                      />
+                                      <input 
+                                        type="text" 
+                                        className="input text-sm flex-1" 
+                                        value={editItemDesc} 
+                                        onChange={e => setEditItemDesc(e.target.value)} 
+                                        placeholder="Toelichting (optioneel)"
+                                      />
+                                      <button onClick={() => updateSetItem(item.id)} className="btn-primary text-xs px-2 py-1">Opslaan</button>
+                                      <button onClick={() => setEditingItemId(null)} className="text-gray-500 hover:text-gray-700 text-xs">Annuleren</button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div className="flex items-center space-x-2 flex-1 cursor-pointer" onClick={() => startEditItem(item)}>
+                                        <span className="text-xs font-medium text-gray-400 w-5">{idx + 1}.</span>
+                                        <span className="text-sm font-medium text-gray-900">{item.title}</span>
+                                        {item.description && <span className="text-xs text-gray-500">— {item.description}</span>}
+                                      </div>
+                                      <button onClick={() => deleteSetItem(item.id)} className="p-1 text-red-400 hover:text-red-600">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               ))}
                             </div>
