@@ -73,14 +73,44 @@ export default function AccountantDashboard() {
 
   async function loadClients() {
     try {
-      const { data } = await supabase
+      const { data: clientsData } = await supabase
         .from('clients')
         .select('*')
         .eq('is_active', true)
         .order('company_name');
 
-      if (data) {
-        setClients(data);
+      if (clientsData) {
+        // Calculate completeness score for each client
+        const clientsWithScores = await Promise.all(
+          clientsData.map(async (client) => {
+            // Get total document requests (sent to client)
+            const { count: totalRequests } = await supabase
+              .from('document_requests')
+              .select('*', { count: 'exact', head: true })
+              .eq('client_id', client.id)
+              .eq('status', 'sent');
+
+            // Get answered requests (with response or received document)
+            const { count: answeredRequests } = await supabase
+              .from('document_requests')
+              .select('*', { count: 'exact', head: true })
+              .eq('client_id', client.id)
+              .not('response', 'is', null);
+
+            // Get received documents
+            const { count: receivedDocs } = await supabase
+              .from('client_documents')
+              .select('*', { count: 'exact', head: true })
+              .eq('client_id', client.id);
+
+            const total = (totalRequests || 0);
+            const completed = (answeredRequests || 0) + (receivedDocs || 0);
+            const score = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+
+            return { ...client, completeness_score: score };
+          })
+        );
+        setClients(clientsWithScores);
       }
     } catch (error) {
       console.error('Error loading clients:', error);
@@ -629,13 +659,6 @@ export default function AccountantDashboard() {
     } finally {
       setSaving(false);
     }
-  }
-
-  function getStatusLabel(score: number) {
-    if (score >= 80) return { label: 'Compleet', color: 'bg-green-100 text-green-800', icon: <CheckCircle className="w-4 h-4 text-green-600" /> };
-    if (score >= 50) return { label: 'In behandeling', color: 'bg-yellow-100 text-yellow-800', icon: <Clock className="w-4 h-4 text-yellow-600" /> };
-    if (score > 0) return { label: 'Actie nodig', color: 'bg-red-100 text-red-800', icon: <AlertTriangle className="w-4 h-4 text-red-600" /> };
-    return { label: 'Nieuw', color: 'bg-gray-100 text-gray-600', icon: <FileText className="w-4 h-4 text-gray-400" /> };
   }
 
   if (loading) {
