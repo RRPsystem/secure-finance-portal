@@ -1494,10 +1494,11 @@ export default function AccountantDashboard() {
                 {newMessageStep === 'choose' && (
                   <div className="space-y-4">
                     <button
-                      onClick={() => setNewMessageStep('set')}
-                      className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-sf-brown hover:bg-sf-beige/30 transition-colors text-left"
+                      type="button"
+                      onClick={() => { console.log('Set clicked'); setNewMessageStep('set'); }}
+                      className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-sf-brown hover:bg-sf-beige/30 transition-colors text-left cursor-pointer"
                     >
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-3 pointer-events-none">
                         <Package className="w-6 h-6 text-sf-brown" />
                         <div>
                           <p className="font-medium text-gray-900">Document set toepassen</p>
@@ -1506,10 +1507,11 @@ export default function AccountantDashboard() {
                       </div>
                     </button>
                     <button
-                      onClick={() => setNewMessageStep('single')}
-                      className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-sf-brown hover:bg-sf-beige/30 transition-colors text-left"
+                      type="button"
+                      onClick={() => { console.log('Single clicked'); setNewMessageStep('single'); }}
+                      className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-sf-brown hover:bg-sf-beige/30 transition-colors text-left cursor-pointer"
                     >
-                      <div className="flex items-center space-x-3">
+                      <div className="flex items-center space-x-3 pointer-events-none">
                         <FileText className="w-6 h-6 text-sf-brown" />
                         <div>
                           <p className="font-medium text-gray-900">Document of vraag toevoegen</p>
