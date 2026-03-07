@@ -131,18 +131,7 @@ export default function AccountantDashboard() {
       return;
     }
     
-    // Mark as read in database
-    await supabase
-      .from('client_documents')
-      .update({ status: 'approved' })
-      .eq('id', docId);
-    
-    // Reload documents to move to "Gelezen" tab
-    if (selectedClient) {
-      await loadClientDocuments(selectedClient.id);
-    }
-    
-    // Create download link
+    // Create download link first so user gets the file
     const url = URL.createObjectURL(data);
     const a = document.createElement('a');
     a.href = url;
@@ -151,6 +140,22 @@ export default function AccountantDashboard() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    
+    // Mark as read in database
+    const { error: updateError } = await supabase
+      .from('client_documents')
+      .update({ status: 'approved' })
+      .eq('id', docId);
+    
+    if (updateError) {
+      console.error('Error marking as read:', updateError);
+    }
+    
+    // Reload documents to move to "Gelezen" tab
+    if (selectedClient) {
+      await loadClientDocuments(selectedClient.id);
+      await loadDocRequests(selectedClient.id);
+    }
   }
 
   async function deleteDocument(docId: string, filePath: string) {
