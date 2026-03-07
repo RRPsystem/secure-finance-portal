@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { LogOut, Users, AlertTriangle, CheckCircle, Clock, Plus, ArrowLeft, Building2, Phone, FileText, Save, CalendarDays, Trash2, ClipboardList, ChevronDown, ChevronRight, Send, MessageSquare, Package, Copy, UserPlus, Download, Bell } from 'lucide-react';
-import type { Client, DocumentCategory, ClientDocumentAssignment, DocumentChecklist, DocumentSet, DocumentSetItem } from '../types/database.types';
+import type { Client, DocumentSet, DocumentSetItem } from '../types/database.types';
 
 type View = 'list' | 'new' | 'detail' | 'sets';
 
@@ -26,15 +26,7 @@ export default function AccountantDashboard() {
     subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht',
   });
 
-  const [categories, setCategories] = useState<DocumentCategory[]>([]);
-  const [assignments, setAssignments] = useState<ClientDocumentAssignment[]>([]);
-  const [checklistItems, setChecklistItems] = useState<DocumentChecklist[]>([]);
-  const [assignDeadlines, setAssignDeadlines] = useState<Record<string, string>>({});
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [showNewCategory, setShowNewCategory] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatType, setNewCatType] = useState<string>('other');
-  const [newCatYear, setNewCatYear] = useState(new Date().getFullYear());
   const [message, setMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
   const [messages, setMessages] = useState<Array<{id: string; subject: string; description: string; status: string; created_at: string}>>([]);
@@ -64,6 +56,10 @@ export default function AccountantDashboard() {
   const [inviteResult, setInviteResult] = useState<{email: string; password: string; url: string} | null>(null);
   const [clientDocuments, setClientDocuments] = useState<Array<{id: string; file_name: string; file_path: string; file_size: number; file_type: string; uploaded_at: string; status: string; request_id: string}>>([]);
   const [inboxTab, setInboxTab] = useState<'nieuw' | 'gelezen' | 'openstaand'>('nieuw');
+  const [showNewMessageModal, setShowNewMessageModal] = useState(false);
+  const [newMessageStep, setNewMessageStep] = useState<'choose' | 'set' | 'single'>('choose');
+  const [selectedSetId, setSelectedSetId] = useState<string>('');
+  const [selectedSetDeadline, setSelectedSetDeadline] = useState('');
 
   const emptyForm = { company_name: '', contact_person: '', email: '', phone: '', address: '', postal_code: '', city: '', kvk_number: '', btw_number: '', subscription_type: 'abonnement' as 'abonnement' | 'per_opdracht' };
 
@@ -110,7 +106,7 @@ export default function AccountantDashboard() {
     });
     setView('detail');
     setDetailsOpen(false);
-    await Promise.all([loadDocumentData(client.id), loadMessages(client.id), loadDocRequests(client.id), loadSets(), loadClientDocuments(client.id)]);
+    await Promise.all([loadMessages(client.id), loadDocRequests(client.id), loadSets(), loadClientDocuments(client.id)]);
   }
 
   async function loadClientDocuments(clientId: string) {
@@ -181,64 +177,6 @@ export default function AccountantDashboard() {
     } catch (error: any) {
       alert('Fout bij verwijderen: ' + error.message);
     }
-  }
-
-  async function loadDocumentData(clientId: string) {
-    const [catRes, assignRes, checkRes] = await Promise.all([
-      supabase.from('document_categories').select('*').eq('is_active', true).order('year', { ascending: false }).order('sort_order'),
-      supabase.from('client_document_assignments').select('*').eq('client_id', clientId),
-      supabase.from('document_checklists').select('*').order('sort_order'),
-    ]);
-    if (catRes.data) setCategories(catRes.data);
-    if (assignRes.data) {
-      setAssignments(assignRes.data);
-      const deadlines: Record<string, string> = {};
-      assignRes.data.forEach((a: ClientDocumentAssignment) => {
-        if (a.deadline) deadlines[a.category_id] = a.deadline.split('T')[0];
-      });
-      setAssignDeadlines(deadlines);
-    }
-    if (checkRes.data) setChecklistItems(checkRes.data);
-  }
-
-  async function toggleAssignment(categoryId: string) {
-    if (!selectedClient) return;
-    const existing = assignments.find(a => a.category_id === categoryId);
-    if (existing) {
-      await supabase.from('client_document_assignments').delete().eq('id', existing.id);
-    } else {
-      await supabase.from('client_document_assignments').insert({
-        client_id: selectedClient.id,
-        category_id: categoryId,
-        deadline: assignDeadlines[categoryId] ? new Date(assignDeadlines[categoryId]).toISOString() : null,
-      });
-    }
-    await loadDocumentData(selectedClient.id);
-  }
-
-  async function updateDeadline(categoryId: string, date: string) {
-    setAssignDeadlines(prev => ({ ...prev, [categoryId]: date }));
-    const existing = assignments.find(a => a.category_id === categoryId);
-    if (existing) {
-      await supabase.from('client_document_assignments').update({
-        deadline: date ? new Date(date).toISOString() : null,
-      }).eq('id', existing.id);
-    }
-  }
-
-  async function createCategory() {
-    if (!newCatName.trim()) return;
-    const { error } = await supabase.from('document_categories').insert({
-      name: newCatName,
-      category_type: newCatType,
-      year: newCatYear,
-      sort_order: categories.length + 1,
-      is_active: true,
-    });
-    if (error) { alert('Fout: ' + error.message); return; }
-    setNewCatName('');
-    setShowNewCategory(false);
-    if (selectedClient) await loadDocumentData(selectedClient.id);
   }
 
   async function loadSets() {
@@ -438,33 +376,21 @@ export default function AccountantDashboard() {
       return;
     }
 
-    // Combine assigned categories + custom requests into one list
-    const allItems: Array<{title: string; description: string; deadline: string}> = [];
-
-    // 1. Category assignments
-    for (const a of assignments) {
-      const cat = categories.find(c => c.id === a.category_id);
-      if (cat) {
-        allItems.push({
-          title: cat.name,
-          description: cat.category_type === 'btw_quarter' ? 'BTW aangifte' : cat.category_type === 'annual_report' ? 'Jaarrekening' : cat.category_type === 'tax_return' ? 'Belastingaangifte' : cat.category_type === 'payroll' ? 'Loonadministratie' : 'Document',
-          deadline: a.deadline ? new Date(a.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Geen deadline',
-        });
-      }
-    }
-
-    // 2. Custom document requests (pending only)
+    // Get pending document requests
     const pendingReqs = docRequests.filter(r => r.status === 'pending');
+    const allItems: Array<{title: string; description: string; deadline: string; type: string}> = [];
+
     for (const r of pendingReqs) {
       allItems.push({
         title: r.title,
         description: r.description || '-',
         deadline: r.deadline ? new Date(r.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Geen deadline',
+        type: r.request_type === 'yes_no' ? 'Vraag' : 'Document',
       });
     }
 
     if (allItems.length === 0) {
-      alert('Geen documenten om te versturen. Vink eerst categorieën aan of voeg documenten toe.');
+      alert('Geen documenten om te versturen. Voeg eerst documenten of vragen toe via "Nieuw bericht".');
       return;
     }
 
@@ -1126,31 +1052,30 @@ export default function AccountantDashboard() {
             {(() => {
               const alerts: Array<{type: 'error' | 'warning' | 'info' | 'success'; text: string}> = [];
               const noEmail = !selectedClient.email && !formData.email;
-              const noAssignments = assignments.length === 0;
-              const withoutDeadline = assignments.filter(a => !a.deadline);
-              const overdue = assignments.filter(a => a.deadline && new Date(a.deadline) < new Date());
-              const upcoming = assignments.filter(a => {
-                if (!a.deadline) return false;
-                const d = new Date(a.deadline);
-                const now = new Date();
-                const inWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                return d >= now && d <= inWeek;
-              });
+              const pendingRequests = docRequests.filter(r => r.status === 'pending');
+              const sentRequests = docRequests.filter(r => r.status === 'sent' && !r.response);
+              const newDocs = clientDocuments.filter(d => d.status === 'pending');
 
+              // Check for overdue requests
+              const overdue = docRequests.filter(r => r.deadline && new Date(r.deadline) < new Date() && r.status === 'sent' && !r.response);
               if (overdue.length > 0) {
-                const names = overdue.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
-                alerts.push({ type: 'error', text: `${overdue.length} verlopen deadline${overdue.length > 1 ? 's' : ''}: ${names.join(', ')}` });
+                alerts.push({ type: 'error', text: `${overdue.length} verlopen deadline${overdue.length > 1 ? 's' : ''}` });
               }
-              if (upcoming.length > 0) {
-                const names = upcoming.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
-                alerts.push({ type: 'warning', text: `${upcoming.length} deadline${upcoming.length > 1 ? 's' : ''} deze week: ${names.join(', ')}` });
+              if (newDocs.length > 0) {
+                alerts.push({ type: 'success', text: `${newDocs.length} nieuw${newDocs.length > 1 ? 'e' : ''} document${newDocs.length > 1 ? 'en' : ''} ontvangen` });
               }
-              if (withoutDeadline.length > 0) {
-                const names = withoutDeadline.map(a => categories.find(c => c.id === a.category_id)?.name).filter(Boolean);
-                alerts.push({ type: 'info', text: `${withoutDeadline.length} ${withoutDeadline.length === 1 ? 'categorie' : 'categorieën'} zonder deadline: ${names.join(', ')}` });
+              if (sentRequests.length > 0) {
+                alerts.push({ type: 'warning', text: `${sentRequests.length} openstaand${sentRequests.length > 1 ? 'e' : ''} verzoek${sentRequests.length > 1 ? 'en' : ''} wacht${sentRequests.length === 1 ? '' : 'en'} op klant` });
               }
-              if (noEmail && !noAssignments) alerts.push({ type: 'info', text: 'Tip: vul een emailadres in om documenten per email te versturen.' });
-              if (alerts.length === 0) alerts.push({ type: 'success', text: noAssignments ? 'Nieuwe klant — wijs hieronder documenten toe om te beginnen.' : 'Alles op orde. Geen openstaande actiepunten.' });
+              if (pendingRequests.length > 0) {
+                alerts.push({ type: 'info', text: `${pendingRequests.length} verzoek${pendingRequests.length > 1 ? 'en' : ''} nog te versturen` });
+              }
+              if (noEmail && pendingRequests.length > 0) {
+                alerts.push({ type: 'info', text: 'Tip: vul een emailadres in om documenten per email te versturen.' });
+              }
+              if (alerts.length === 0) {
+                alerts.push({ type: 'success', text: 'Nieuwe klant — klik op "Nieuw bericht" om documenten aan te vragen.' });
+              }
 
               const colorMap = { error: 'bg-red-50 border-red-200 text-red-800', warning: 'bg-yellow-50 border-yellow-200 text-yellow-800', info: 'bg-blue-50 border-blue-200 text-blue-800', success: 'bg-green-50 border-green-200 text-green-800' };
               const iconMap = { error: <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />, warning: <Clock className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />, info: <CalendarDays className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />, success: <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" /> };
@@ -1160,7 +1085,7 @@ export default function AccountantDashboard() {
                   <div className="flex items-center justify-between mb-1">
                     <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Actiepunten</h3>
                     <div className="flex items-center space-x-4 text-sm text-gray-500">
-                      <span><span className="font-medium text-gray-900">{assignments.length}</span> categorieën</span>
+                      <span><span className="font-medium text-gray-900">{docRequests.length}</span> verzoeken</span>
                       <span><span className="font-medium text-gray-900">{messages.length}</span> berichten</span>
                     </div>
                   </div>
@@ -1252,6 +1177,13 @@ export default function AccountantDashboard() {
                   </div>
                   <h3 className="text-lg font-bold text-gray-900">Communicatie</h3>
                 </div>
+                <button
+                  onClick={() => { setShowNewMessageModal(true); setNewMessageStep('choose'); }}
+                  className="btn-primary flex items-center space-x-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nieuw bericht</span>
+                </button>
               </div>
 
               {/* Tabbladen */}
@@ -1436,192 +1368,39 @@ export default function AccountantDashboard() {
               )}
             </div>
 
-            {/* Documenten voor klant - geïntegreerde sectie */}
-            <div className="card mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  <ClipboardList className="w-5 h-5 text-sf-taupe" />
-                  <h3 className="text-lg font-bold text-gray-900">Documenten aanvragen</h3>
-                </div>
-                <button onClick={() => setShowNewCategory(!showNewCategory)} className="text-sm text-sf-taupe hover:text-sf-brown flex items-center space-x-1">
-                  <Plus className="w-4 h-4" />
-                  <span>Nieuwe categorie</span>
-                </button>
-              </div>
-
-              {/* Set toepassen */}
-              {docSets.length > 0 && (
-                <div className="bg-sf-beige border border-sf-sand rounded-lg p-4 mb-4">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <Copy className="w-4 h-4 text-sf-taupe" />
-                    <span className="text-sm font-medium text-sf-brown">Set toepassen op deze klant</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <select id="setSelect" className="input flex-1 text-sm" defaultValue="">
-                      <option value="" disabled>Kies een document set...</option>
-                      {docSets.map(s => (
-                        <option key={s.id} value={s.id}>{s.name} ({docSetItems.filter(i => i.set_id === s.id).length} documenten)</option>
-                      ))}
-                    </select>
-                    <input type="date" id="setDeadline" className="input text-sm w-40" placeholder="Deadline" />
-                    <button
-                      onClick={() => {
-                        const sel = (document.getElementById('setSelect') as HTMLSelectElement)?.value;
-                        const dl = (document.getElementById('setDeadline') as HTMLInputElement)?.value;
-                        if (sel) applySetToClient(sel, dl || undefined);
-                      }}
-                      disabled={applyingSet}
-                      className="btn-primary disabled:opacity-50 text-sm whitespace-nowrap"
-                    >
-                      <Package className="w-4 h-4 mr-1 inline" />{applyingSet ? 'Bezig...' : 'Toepassen'}
-                    </button>
+            {/* Openstaande verzoeken */}
+            {docRequests.filter(r => r.status === 'pending').length > 0 && (
+              <div className="card mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <ClipboardList className="w-5 h-5 text-sf-taupe" />
+                    <h3 className="text-lg font-bold text-gray-900">Nog te versturen</h3>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                      {docRequests.filter(r => r.status === 'pending').length} items
+                    </span>
                   </div>
                 </div>
-              )}
 
-              {showNewCategory && (
-                <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
-                  <p className="text-sm font-medium text-gray-700 mb-3">Nieuwe document categorie</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <input type="text" placeholder="Naam (bijv. Loonheffing Q1)" className="input" value={newCatName} onChange={e => setNewCatName(e.target.value)} />
-                    <select className="input" value={newCatType} onChange={e => setNewCatType(e.target.value)}>
-                      <option value="btw_quarter">BTW kwartaal</option>
-                      <option value="annual_report">Jaarrekening</option>
-                      <option value="payroll">Loonadministratie</option>
-                      <option value="tax_return">Belastingaangifte</option>
-                      <option value="other">Overig</option>
-                    </select>
-                    <div className="flex space-x-2">
-                      <input type="number" placeholder="Jaar" className="input" value={newCatYear} onChange={e => setNewCatYear(parseInt(e.target.value))} />
-                      <button onClick={createCategory} className="btn-primary whitespace-nowrap">Toevoegen</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <p className="text-sm text-gray-500 mb-2">Stap 1: Vink categorieën aan en stel deadlines in.</p>
-
-              {categories.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">Geen document categorieën gevonden.</p>
-              ) : (
-                <div className="space-y-2 mb-6">
-                  {categories.map(cat => {
-                    const isAssigned = assignments.some(a => a.category_id === cat.id);
-                    const catChecklist = checklistItems.filter(ci => ci.category_id === cat.id);
-                    return (
-                      <div key={cat.id} className={`border rounded-lg p-3 transition-colors ${isAssigned ? 'border-sf-taupe bg-sf-beige' : 'border-gray-200'}`}>
-                        <div className="flex items-center justify-between">
-                          <label className="flex items-center space-x-3 cursor-pointer flex-1">
-                            <input
-                              type="checkbox"
-                              checked={isAssigned}
-                              onChange={() => toggleAssignment(cat.id)}
-                              className="w-4 h-4 text-sf-taupe border-gray-300 rounded focus:ring-sf-taupe"
-                            />
-                            <div>
-                              <span className="font-medium text-gray-900">{cat.name}</span>
-                              <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                                {cat.category_type === 'btw_quarter' ? 'BTW' : cat.category_type === 'annual_report' ? 'Jaarrekening' : cat.category_type === 'tax_return' ? 'Aangifte' : cat.category_type === 'payroll' ? 'Loon' : 'Overig'}
-                              </span>
-                            </div>
-                          </label>
-                          {isAssigned && (
-                            <div className="flex items-center space-x-2">
-                              <CalendarDays className="w-4 h-4 text-gray-400" />
-                              <input
-                                type="date"
-                                value={assignDeadlines[cat.id] || ''}
-                                onChange={e => updateDeadline(cat.id, e.target.value)}
-                                className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-sf-taupe focus:border-sf-taupe"
-                              />
-                              <button onClick={() => toggleAssignment(cat.id)} className="p-1 text-red-400 hover:text-red-600" title="Verwijderen">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        {isAssigned && catChecklist.length > 0 && (
-                          <div className="mt-2 ml-7 space-y-1">
-                            {catChecklist.map(item => (
-                              <div key={item.id} className="flex items-center space-x-2 text-sm text-gray-600">
-                                <div className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-                                <span>{item.item_name}</span>
-                                {item.is_required && <span className="text-xs text-red-500">*verplicht</span>}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Extra documenten toevoegen */}
-              <div className="border-t border-gray-200 pt-4 mb-4">
-                <p className="text-sm text-gray-500 mb-2">Stap 2: Voeg eventueel extra specifieke documenten of vragen toe.</p>
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                    <div className="md:col-span-2">
-                      <select className="input text-sm" value={newReqType} onChange={e => setNewReqType(e.target.value as 'upload' | 'yes_no')}>
-                        <option value="upload">📄 Document</option>
-                        <option value="yes_no">❓ Ja/Nee vraag</option>
-                      </select>
-                    </div>
-                    <div className="md:col-span-2">
-                      <input type="text" placeholder="Onderwerp (optioneel)" className="input text-sm" value={newReqCategory} onChange={e => setNewReqCategory(e.target.value)} />
-                    </div>
-                    <div className="md:col-span-3">
-                      <input type="text" placeholder={newReqType === 'upload' ? "Document (bijv. Jaaropgave bank 2024)" : "Vraag (bijv. Wilt u uitstel aanvragen?)"} className="input text-sm" value={newReqTitle} onChange={e => setNewReqTitle(e.target.value)} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <input type="text" placeholder="Toelichting (optioneel)" className="input text-sm" value={newReqDesc} onChange={e => setNewReqDesc(e.target.value)} />
-                    </div>
-                    <div className="md:col-span-2">
-                      <input type="date" className="input text-sm" value={newReqDeadline} onChange={e => setNewReqDeadline(e.target.value)} />
-                    </div>
-                    <div className="md:col-span-1">
-                      <button onClick={addDocRequest} disabled={!newReqTitle.trim()} className="btn-primary w-full disabled:opacity-50 text-sm">
-                        <Plus className="w-3 h-3 mr-1 inline" />Toevoegen
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Lijst van custom items */}
-              {docRequests.length > 0 && (
                 <div className="space-y-2 mb-4">
-                  {docRequests.map(req => {
-                    const statusColors: Record<string, string> = { pending: 'bg-yellow-100 text-yellow-800', sent: 'bg-blue-100 text-blue-800', completed: 'bg-green-100 text-green-800', approved: 'bg-green-100 text-green-800', rejected: 'bg-red-100 text-red-800' };
-                    const statusLabels: Record<string, string> = { pending: 'Nog niet verstuurd', sent: 'Verstuurd', completed: 'Afgerond', approved: 'Goedgekeurd', rejected: 'Afgekeurd' };
+                  {docRequests.filter(r => r.status === 'pending').map(req => {
                     const isYesNo = req.request_type === 'yes_no';
                     return (
-                      <div key={req.id} className={`flex items-center justify-between p-3 border rounded-lg ${req.response ? 'bg-green-50 border-green-200' : 'border-gray-200'}`}>
+                      <div key={req.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
                         <div className="flex-1">
                           <div className="flex items-center space-x-2">
                             <span className="text-sm">{isYesNo ? '❓' : '📄'}</span>
+                            {req.category && <span className="text-xs lowercase text-sf-taupe">{req.category} •</span>}
                             <span className="font-medium text-gray-900 text-sm">{req.title}</span>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${statusColors[req.status] || 'bg-gray-100 text-gray-600'}`}>
-                              {statusLabels[req.status] || req.status}
-                            </span>
                           </div>
                           <div className="flex items-center space-x-3 mt-1 text-xs text-gray-500">
                             {req.description && <span>{req.description}</span>}
                             {req.deadline && (
                               <span className="flex items-center space-x-1">
                                 <CalendarDays className="w-3 h-3" />
-                                <span>{new Date(req.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                <span>{new Date(req.deadline).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>
                               </span>
                             )}
-                            {req.sent_at && <span>Verstuurd: {new Date(req.sent_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>}
                           </div>
-                          {req.response && (
-                            <div className="mt-2 p-2 bg-white border border-green-300 rounded text-sm">
-                              <span className="font-medium text-green-700">Antwoord klant: </span>
-                              <span className="text-gray-700">{req.response}</span>
-                            </div>
-                          )}
                         </div>
                         <button onClick={() => deleteDocRequest(req.id)} className="p-1 text-red-400 hover:text-red-600 ml-2" title="Verwijderen">
                           <Trash2 className="w-4 h-4" />
@@ -1630,31 +1409,30 @@ export default function AccountantDashboard() {
                     );
                   })}
                 </div>
-              )}
 
-              {/* Verstuur met voorwoord */}
-              <div className="border-t border-gray-200 pt-4">
-                <p className="text-sm text-gray-500 mb-2">Stap 3: Schrijf een persoonlijk bericht en verstuur alles per email.</p>
-                <textarea
-                  rows={3}
-                  className="input w-full mb-3 text-sm"
-                  placeholder="Voorwoord (optioneel) — bijv. 'Graag ontvangen wij onderstaande documenten voor uw IB aangifte 2024. De deadline is 1 mei.'"
-                  value={sendIntro}
-                  onChange={e => setSendIntro(e.target.value)}
-                />
-                <button
-                  onClick={sendDocRequestsEmail}
-                  disabled={sendingRequests || (assignments.length === 0 && docRequests.filter(r => r.status === 'pending').length === 0)}
-                  className="btn-primary w-full disabled:opacity-50 flex items-center justify-center space-x-2 py-3"
-                >
-                  <Send className="w-5 h-5" />
-                  <span>{sendingRequests ? 'Verzenden...' : `Verstuur documentoverzicht naar klant (${assignments.length + docRequests.filter(r => r.status === 'pending').length} items)`}</span>
-                </button>
-                {(!selectedClient?.email && !formData.email) && (
-                  <p className="text-xs text-red-500 mt-2 text-center">Vul eerst een emailadres in bij Bedrijfsgegevens</p>
-                )}
+                {/* Verstuur knop */}
+                <div className="border-t border-gray-200 pt-4">
+                  <textarea
+                    rows={2}
+                    className="input w-full mb-3 text-sm"
+                    placeholder="Voorwoord (optioneel) — bijv. 'Graag ontvangen wij onderstaande documenten.'"
+                    value={sendIntro}
+                    onChange={e => setSendIntro(e.target.value)}
+                  />
+                  <button
+                    onClick={sendDocRequestsEmail}
+                    disabled={sendingRequests}
+                    className="btn-primary w-full disabled:opacity-50 flex items-center justify-center space-x-2 py-3"
+                  >
+                    <Send className="w-5 h-5" />
+                    <span>{sendingRequests ? 'Verzenden...' : `Verstuur naar klant (${docRequests.filter(r => r.status === 'pending').length} items)`}</span>
+                  </button>
+                  {(!selectedClient?.email && !formData.email) && (
+                    <p className="text-xs text-red-500 mt-2 text-center">Vul eerst een emailadres in bij Bedrijfsgegevens</p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Berichten */}
             <div className="card">
@@ -1694,6 +1472,154 @@ export default function AccountantDashboard() {
               )}
             </div>
           </>
+        )}
+
+        {/* Modal: Nieuw bericht aanmaken */}
+        {showNewMessageModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {newMessageStep === 'choose' && 'Nieuw bericht aanmaken'}
+                    {newMessageStep === 'set' && 'Document set toepassen'}
+                    {newMessageStep === 'single' && 'Document of vraag toevoegen'}
+                  </h3>
+                  <button onClick={() => setShowNewMessageModal(false)} className="text-gray-400 hover:text-gray-600">
+                    <span className="text-2xl">&times;</span>
+                  </button>
+                </div>
+
+                {/* Stap 1: Keuze */}
+                {newMessageStep === 'choose' && (
+                  <div className="space-y-4">
+                    <button
+                      onClick={() => setNewMessageStep('set')}
+                      className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-sf-brown hover:bg-sf-beige/30 transition-colors text-left"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Package className="w-6 h-6 text-sf-brown" />
+                        <div>
+                          <p className="font-medium text-gray-900">Document set toepassen</p>
+                          <p className="text-sm text-gray-500">Pas een vooraf gedefinieerde set documenten toe</p>
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setNewMessageStep('single')}
+                      className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-sf-brown hover:bg-sf-beige/30 transition-colors text-left"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <FileText className="w-6 h-6 text-sf-brown" />
+                        <div>
+                          <p className="font-medium text-gray-900">Document of vraag toevoegen</p>
+                          <p className="text-sm text-gray-500">Vraag een specifiek document of stel een ja/nee vraag</p>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+
+                {/* Stap 2a: Set toepassen */}
+                {newMessageStep === 'set' && (
+                  <div className="space-y-4">
+                    <button onClick={() => setNewMessageStep('choose')} className="text-sm text-gray-500 hover:text-gray-700 flex items-center space-x-1">
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Terug</span>
+                    </button>
+                    
+                    {docSets.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4">Geen document sets beschikbaar. Maak eerst een set aan in Document Sets.</p>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Kies een set</label>
+                          <select 
+                            className="input" 
+                            value={selectedSetId} 
+                            onChange={e => setSelectedSetId(e.target.value)}
+                          >
+                            <option value="">Selecteer een set...</option>
+                            {docSets.map(set => (
+                              <option key={set.id} value={set.id}>
+                                {set.name} ({docSetItems.filter(i => i.set_id === set.id).length} documenten)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Deadline (optioneel)</label>
+                          <input 
+                            type="date" 
+                            className="input" 
+                            value={selectedSetDeadline} 
+                            onChange={e => setSelectedSetDeadline(e.target.value)} 
+                          />
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!selectedSetId) return;
+                            await applySetToClient(selectedSetId, selectedSetDeadline || undefined);
+                            setShowNewMessageModal(false);
+                            setSelectedSetId('');
+                            setSelectedSetDeadline('');
+                          }}
+                          disabled={!selectedSetId || applyingSet}
+                          className="btn-primary w-full disabled:opacity-50"
+                        >
+                          {applyingSet ? 'Toepassen...' : 'Set toepassen'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Stap 2b: Enkel document/vraag */}
+                {newMessageStep === 'single' && (
+                  <div className="space-y-4">
+                    <button onClick={() => setNewMessageStep('choose')} className="text-sm text-gray-500 hover:text-gray-700 flex items-center space-x-1">
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Terug</span>
+                    </button>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                      <select className="input" value={newReqType} onChange={e => setNewReqType(e.target.value as 'upload' | 'yes_no')}>
+                        <option value="upload">📄 Document aanvragen</option>
+                        <option value="yes_no">❓ Ja/Nee vraag stellen</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Onderwerp (optioneel)</label>
+                      <input type="text" className="input" placeholder="bijv. BTW Q1 2025" value={newReqCategory} onChange={e => setNewReqCategory(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{newReqType === 'upload' ? 'Document naam' : 'Vraag'}</label>
+                      <input type="text" className="input" placeholder={newReqType === 'upload' ? "bijv. Jaaropgave bank 2024" : "bijv. Wilt u uitstel aanvragen?"} value={newReqTitle} onChange={e => setNewReqTitle(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Toelichting (optioneel)</label>
+                      <input type="text" className="input" placeholder="Extra uitleg voor de klant" value={newReqDesc} onChange={e => setNewReqDesc(e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Deadline (optioneel)</label>
+                      <input type="date" className="input" value={newReqDeadline} onChange={e => setNewReqDeadline(e.target.value)} />
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await addDocRequest();
+                        setShowNewMessageModal(false);
+                      }}
+                      disabled={!newReqTitle.trim()}
+                      className="btn-primary w-full disabled:opacity-50"
+                    >
+                      Toevoegen
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>
