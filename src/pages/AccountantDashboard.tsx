@@ -1559,12 +1559,16 @@ export default function AccountantDashboard() {
                           />
                         </div>
                         <button
+                          type="button"
                           onClick={async () => {
-                            if (!selectedSetId) return;
+                            if (!selectedSetId || !selectedClient) return;
                             await applySetToClient(selectedSetId, selectedSetDeadline || undefined);
+                            // Force reload data
+                            await loadDocRequests(selectedClient.id);
                             setShowNewMessageModal(false);
                             setSelectedSetId('');
                             setSelectedSetDeadline('');
+                            setNewMessageStep('choose');
                           }}
                           disabled={!selectedSetId || applyingSet}
                           className="btn-primary w-full disabled:opacity-50"
