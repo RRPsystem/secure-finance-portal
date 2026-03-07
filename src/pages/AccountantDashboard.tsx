@@ -865,15 +865,19 @@ export default function AccountantDashboard() {
                             </span>
                           </td>
                           <td className="py-3 px-4">
-                            {(() => {
-                              const s = getStatusLabel(client.completeness_score);
-                              return (
-                                <span className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${s.color}`}>
-                                  {s.icon}
-                                  <span>{s.label}</span>
-                                </span>
-                              );
-                            })()}
+                            <div className="flex items-center space-x-2">
+                              <div className="flex-1 bg-gray-200 rounded-full h-2 w-24">
+                                <div 
+                                  className={`h-2 rounded-full transition-all ${
+                                    client.completeness_score >= 80 ? 'bg-green-500' : 
+                                    client.completeness_score >= 50 ? 'bg-yellow-500' : 
+                                    client.completeness_score > 0 ? 'bg-orange-500' : 'bg-gray-300'
+                                  }`}
+                                  style={{ width: `${client.completeness_score}%` }}
+                                />
+                              </div>
+                              <span className="text-xs text-gray-600 w-8">{client.completeness_score}%</span>
+                            </div>
                           </td>
                           <td className="py-3 px-4 text-right">
                             <span className="text-sf-taupe hover:text-sf-brown font-medium text-sm">
