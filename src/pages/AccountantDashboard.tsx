@@ -38,11 +38,12 @@ export default function AccountantDashboard() {
   const [message, setMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
   const [messages, setMessages] = useState<Array<{id: string; subject: string; description: string; status: string; created_at: string}>>([]);
-  const [docRequests, setDocRequests] = useState<Array<{id: string; title: string; description?: string; deadline?: string; status: string; sent_at?: string; created_at: string; request_type?: string; response?: string}>>([]);
+  const [docRequests, setDocRequests] = useState<Array<{id: string; title: string; description?: string; deadline?: string; status: string; sent_at?: string; created_at: string; request_type?: string; response?: string; category?: string}>>([]);
   const [newReqType, setNewReqType] = useState<'upload' | 'yes_no'>('upload');
   const [newReqTitle, setNewReqTitle] = useState('');
   const [newReqDesc, setNewReqDesc] = useState('');
   const [newReqDeadline, setNewReqDeadline] = useState('');
+  const [newReqCategory, setNewReqCategory] = useState('');
   const [sendingRequests, setSendingRequests] = useState(false);
   const [sendIntro, setSendIntro] = useState('');
   const [docSets, setDocSets] = useState<DocumentSet[]>([]);
@@ -326,6 +327,7 @@ export default function AccountantDashboard() {
     setApplyingSet(true);
     try {
       const items = docSetItems.filter(i => i.set_id === setId);
+      const setName = docSets.find(s => s.id === setId)?.name || 'Set';
       if (items.length === 0) { alert('Deze set heeft geen documenten.'); return; }
       for (const item of items) {
         await supabase.from('document_requests').insert({
@@ -335,10 +337,10 @@ export default function AccountantDashboard() {
           deadline: deadline || null,
           status: 'pending',
           created_by: user?.id,
+          category: setName,
         });
       }
       await loadDocRequests(selectedClient.id);
-      const setName = docSets.find(s => s.id === setId)?.name || 'Set';
       alert(`${items.length} documenten uit "${setName}" toegevoegd.`);
     } catch (err: any) {
       alert('Fout: ' + err.message);
@@ -411,12 +413,14 @@ export default function AccountantDashboard() {
       status: 'pending',
       created_by: user?.id,
       request_type: newReqType,
+      category: newReqCategory || null,
     });
     if (error) { alert('Fout: ' + error.message); return; }
     setNewReqTitle('');
     setNewReqDesc('');
     setNewReqDeadline('');
     setNewReqType('upload');
+    setNewReqCategory('');
     await loadDocRequests(selectedClient.id);
   }
 
@@ -1297,7 +1301,9 @@ export default function AccountantDashboard() {
                               <div>
                                 <p className="font-medium text-gray-900 text-sm">{doc.file_name}</p>
                                 <div className="flex items-center space-x-2 text-xs text-gray-500">
-                                  {relatedRequest && <span>Voor: {relatedRequest.title}</span>}
+                                  {relatedRequest?.category && <span className="lowercase text-sf-taupe">{relatedRequest.category}</span>}
+                                  {relatedRequest?.category && relatedRequest?.title && <span>•</span>}
+                                  {relatedRequest && <span>{relatedRequest.title}</span>}
                                   <span>•</span>
                                   <span>{new Date(doc.uploaded_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
                                 </div>
@@ -1344,7 +1350,9 @@ export default function AccountantDashboard() {
                               <div>
                                 <p className="font-medium text-gray-900 text-sm">{doc.file_name}</p>
                                 <div className="flex items-center space-x-2 text-xs text-gray-500">
-                                  {relatedRequest && <span>Voor: {relatedRequest.title}</span>}
+                                  {relatedRequest?.category && <span className="lowercase text-sf-taupe">{relatedRequest.category}</span>}
+                                  {relatedRequest?.category && relatedRequest?.title && <span>•</span>}
+                                  {relatedRequest && <span>{relatedRequest.title}</span>}
                                   <span>•</span>
                                   <span>{new Date(doc.uploaded_at).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' })}</span>
                                 </div>
@@ -1363,20 +1371,19 @@ export default function AccountantDashboard() {
                           </div>
                         );
                       })}
-                      {/* Beantwoorde vragen */}
+                      {/* Beantwoorde vragen - vraag en antwoord bij elkaar */}
                       {docRequests.filter(r => r.response).map(req => (
-                        <div key={req.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                          <div>
-                            <p className="font-medium text-gray-900 text-sm">{req.title}</p>
-                            {req.description && <p className="text-xs text-gray-500">{req.description}</p>}
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <span className={`px-3 py-1 rounded text-sm font-medium ${req.response === 'Ja' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
-                              {req.response}
-                            </span>
+                        <div key={req.id} className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              {req.category && <span className="text-xs lowercase text-sf-taupe">{req.category} • </span>}
+                              <span className="font-medium text-gray-900 text-sm">{req.title}</span>
+                              {req.description && <p className="text-xs text-gray-500 mt-0.5">Vraag: {req.description}</p>}
+                              <p className="text-xs text-gray-600 mt-1">Antwoord: <span className={`font-medium ${req.response === 'Ja' ? 'text-green-600' : 'text-gray-700'}`}>{req.response}</span></p>
+                            </div>
                             <button 
                               onClick={() => deleteDocRequest(req.id)}
-                              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded"
+                              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded ml-2"
                               title="Verwijderen"
                             >
                               <Trash2 className="w-4 h-4" />
@@ -1401,6 +1408,7 @@ export default function AccountantDashboard() {
                           <div>
                             <div className="flex items-center space-x-2">
                               <span className="text-sm">{req.request_type === 'yes_no' ? '❓' : '📄'}</span>
+                              {req.category && <span className="text-xs lowercase text-sf-taupe">{req.category} •</span>}
                               <p className="font-medium text-gray-900 text-sm">{req.title}</p>
                             </div>
                             <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
@@ -1560,16 +1568,19 @@ export default function AccountantDashboard() {
                         <option value="yes_no">❓ Ja/Nee vraag</option>
                       </select>
                     </div>
+                    <div className="md:col-span-2">
+                      <input type="text" placeholder="Onderwerp (optioneel)" className="input text-sm" value={newReqCategory} onChange={e => setNewReqCategory(e.target.value)} />
+                    </div>
                     <div className="md:col-span-3">
                       <input type="text" placeholder={newReqType === 'upload' ? "Document (bijv. Jaaropgave bank 2024)" : "Vraag (bijv. Wilt u uitstel aanvragen?)"} className="input text-sm" value={newReqTitle} onChange={e => setNewReqTitle(e.target.value)} />
                     </div>
-                    <div className="md:col-span-3">
+                    <div className="md:col-span-2">
                       <input type="text" placeholder="Toelichting (optioneel)" className="input text-sm" value={newReqDesc} onChange={e => setNewReqDesc(e.target.value)} />
                     </div>
                     <div className="md:col-span-2">
                       <input type="date" className="input text-sm" value={newReqDeadline} onChange={e => setNewReqDeadline(e.target.value)} />
                     </div>
-                    <div className="md:col-span-2">
+                    <div className="md:col-span-1">
                       <button onClick={addDocRequest} disabled={!newReqTitle.trim()} className="btn-primary w-full disabled:opacity-50 text-sm">
                         <Plus className="w-3 h-3 mr-1 inline" />Toevoegen
                       </button>
