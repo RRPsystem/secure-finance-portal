@@ -83,29 +83,37 @@ export default function AccountantDashboard() {
         // Calculate completeness score for each client
         const clientsWithScores = await Promise.all(
           clientsData.map(async (client) => {
-            // Get total document requests (sent to client)
-            const { count: totalRequests } = await supabase
+            // Get ALL document requests that have been sent (status 'sent' or have a response)
+            const { data: allRequests } = await supabase
               .from('document_requests')
-              .select('*', { count: 'exact', head: true })
+              .select('id, status, response, request_type')
               .eq('client_id', client.id)
-              .eq('status', 'sent');
-
-            // Get answered requests (with response or received document)
-            const { count: answeredRequests } = await supabase
-              .from('document_requests')
-              .select('*', { count: 'exact', head: true })
-              .eq('client_id', client.id)
-              .not('response', 'is', null);
+              .in('status', ['sent', 'received', 'approved', 'completed']);
 
             // Get received documents
-            const { count: receivedDocs } = await supabase
+            const { data: receivedDocs } = await supabase
               .from('client_documents')
-              .select('*', { count: 'exact', head: true })
+              .select('id, request_id')
               .eq('client_id', client.id);
 
-            const total = (totalRequests || 0);
-            const completed = (answeredRequests || 0) + (receivedDocs || 0);
-            const score = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+            const totalRequests = allRequests?.length || 0;
+            
+            // Count completed: requests with response (yes/no) + requests with uploaded document
+            let completedCount = 0;
+            if (allRequests) {
+              for (const req of allRequests) {
+                // Yes/no question answered
+                if (req.response) {
+                  completedCount++;
+                }
+                // Document uploaded for this request
+                else if (req.request_type === 'upload' && receivedDocs?.some(d => d.request_id === req.id)) {
+                  completedCount++;
+                }
+              }
+            }
+
+            const score = totalRequests > 0 ? Math.round((completedCount / totalRequests) * 100) : 0;
 
             return { ...client, completeness_score: score };
           })
